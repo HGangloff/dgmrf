@@ -1,0 +1,11 @@
+__pycache__
+*/__pycache__
+*.egg-info
+build/
+.ipynb_checkpoints/
+*.html
+*.pdf
+*cache/
+*files/
+.Rhistory
+.vscode/settings.json

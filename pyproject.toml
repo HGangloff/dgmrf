@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["dgmrf"]
+
+[tool.setuptools_scm]
+[project]
+name = "dgmrf"
+dynamic = ["version"]
+description = "Deep Gaussian Markov Random Fields and their extensions"
+readme = "README.md"
+license = {text = "Apache License 2.0"}
+requires-python = ">=3.7"
+keywords = []
+authors = [
+  {name = "Hugo Gangloff", email = "hugo.gangloff@inrae.fr"},
+]
+maintainers = [
+  {name = "Hugo Gangloff", email = "hugo.gangloff@inrae.fr"},
+]
+classifiers = [
+  "License :: OSI Approved :: Apache Software License",
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python",
+]
+dependencies = ["numpy", "jax", "optax", "equinox", "jax-tqdm", "torch"]
+
+[project.optional-dependencies]
+notebook = ["jupyter", "matplotlib"]
+
+[project.urls]
+Repository = "https://gitlab.com/hugo.gangloff/dgmrf"
+Documentation = "https://hugo.gangloff.gitlab.io/dgmrf/index.html"

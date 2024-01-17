@@ -1,0 +1,1 @@
+from ._utils import get_adjacency_matrix_lattice

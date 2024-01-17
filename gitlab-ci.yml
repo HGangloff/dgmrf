@@ -1,0 +1,67 @@
+image: "registry.gitlab.com/mia_jinns/docker-image-quarto-jax-sphinx:main"
+
+stages:
+  - linting
+  - tests
+  - build
+  - publish
+
+black:
+  stage: linting
+  image: registry.gitlab.com/pipeline-components/black:latest
+  script:
+    - black --check --verbose -- .
+  tags:
+    - docker
+
+run_tests:
+  stage: tests
+  before_script:
+    - pip install --break-system-packages pytest
+  script:
+    - pip install --break-system-packages .
+    - cd tests
+    - sh runtests.sh # without GPU on gitlab CI/CD
+
+build_doc:
+  stage: build
+  before_script:
+    - pip install --break-system-packages sphinx sphinx_rtd_theme
+    - apt install pandoc
+    - pip install --break-system-packages nbsphinx pandoc
+  script:
+    - pip install --break-system-packages .
+    - make -C doc clean html
+  artifacts:
+    untracked: true
+    expire_in: 1 week
+  tags:
+    - docker
+
+build_package:
+  stage: build
+  image: "python:3.9"
+  before_script:
+    - pip install build
+  script:
+    - rm -rf dist/
+    - python -m build
+  artifacts:
+    untracked: true
+    expire_in: 1 week
+  tags:
+    - docker
+
+pages:
+  stage: publish
+  image: "python:3.9"
+  script:
+    - rm -rf public/
+    - cp -r doc/build/html public/
+  artifacts:
+    paths:
+    - public
+  tags:
+    - docker
+  only:
+    - main
