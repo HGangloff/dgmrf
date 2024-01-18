@@ -25,7 +25,16 @@ class DGMRF(eqx.Module):
     layers: list
     N: int
 
-    def __init__(self, key, nb_layers, height_width=None, A_D=None, init_params=None):
+    def __init__(
+        self,
+        key,
+        nb_layers,
+        height_width=None,
+        A_D=None,
+        init_params=None,
+        *args,
+        **kwargs,
+    ):
         """
         Parameters
         ----------
@@ -43,6 +52,10 @@ class DGMRF(eqx.Module):
             Wether to use specific parameters for the DGMRF creation. If creating a convolutional DGMRF, init_params
             is list of jnp.array([a[0], a[1], a[2], a[3], a[4], b]) for each layer
             If creating a graph DMGRF, init_params is a list of jnp.array([alpha, beta, gamma, b]) for each layer
+        args
+            Diverse arguments that will be passed to the layer init function
+        kwargs
+            Diverse arguments that will be passed to the layer init function
         """
         if (height_width is None and A_D is None) or (
             height_width is not None and A_D is not None
@@ -76,20 +89,27 @@ class DGMRF(eqx.Module):
                 self.N = height_width[0] * height_width[1]
             if A_D is not None:
                 if init_params is not None:
+                    self.key, subkey = jax.random.split(self.key, 2)
                     self.layers.append(
                         GraphLayer(
                             GraphLayer.params_transform_inverse(init_params[i]),
                             A_D[0],
                             A_D[1],
+                            *args,
+                            **kwargs,
+                            key=subkey,
                         )
                     )
                 else:
-                    self.key, subkey = jax.random.split(self.key, 2)
+                    self.key, subkey1, subkey2 = jax.random.split(self.key, 3)
                     self.layers.append(
                         GraphLayer(
-                            jax.random.uniform(subkey, (4,), minval=-1, maxval=1),
+                            jax.random.uniform(subkey1, (4,), minval=-1, maxval=1),
                             A_D[0],
                             A_D[1],
+                            *args,
+                            **kwargs,
+                            key=subkey2,
                         )
                     )
                 self.N = A_D[0].shape[0]

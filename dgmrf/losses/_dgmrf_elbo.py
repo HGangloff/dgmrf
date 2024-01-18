@@ -38,23 +38,43 @@ def dgmrf_elbo(params, static, y, key, N, Nq, M):
     S_phi = jnp.exp(params["log_S_phi"])
     sigma = jnp.exp(params["log_sigma"])
 
-    def scan_Nq(carry, _):
-        key = carry[0]
-        key, subkey = jax.random.split(key, 2)
-        eps = jax.random.normal(subkey, (N,))
-        xi = params["nu_phi"] + jnp.sqrt(S_phi) * eps
+    # def scan_Nq(carry, _):
+    #    key = carry[0]
+    #    key, subkey = jax.random.split(key, 2)
+    #    eps = jax.random.normal(subkey, (N,))
+    #    xi = params["nu_phi"] + jnp.sqrt(S_phi) * eps
 
-        g_xi = dgmrf(xi).flatten()
-        res = g_xi.T @ g_xi + 1 / (sigma**2) * (y - xi).T @ (y - xi)
+    #    g_xi = dgmrf(xi).flatten()
+    #    res = g_xi.T @ g_xi + 1 / (sigma**2) * (y - xi).T @ (y - xi)
 
-        return (key,), res
+    #    return (key,), res
 
-    _, accu_mcmc = jax.lax.scan(scan_Nq, (key,), jnp.arange(Nq))
-    res_mcmc = jnp.mean(accu_mcmc)
+    # _, accu_mcmc = jax.lax.scan(scan_Nq, (key,), jnp.arange(Nq))
+    # res_mcmc = jnp.mean(accu_mcmc)
 
     log_det_S_phi = jnp.sum(params["log_S_phi"])
     log_det_G_theta = dgmrf.log_det()
     log_sigma = params["log_sigma"]
+
+    key, subkey = jax.random.split(key, 2)
+    eps = jax.random.normal(subkey, (N,))
+    xi = params["nu_phi"] + jnp.sqrt(S_phi) * eps
+
+    jax.debug.print("------ \n {p}", p=params["dgmrf"].layers[0].params)
+    from dgmrf.layers._graph_layer import GraphLayer
+
+    jax.debug.print(
+        "{p}", p=GraphLayer.params_transform(params["dgmrf"].layers[0].params)
+    )
+    jax.debug.print("{p}", p=dgmrf(xi))
+    res_mcmc = jnp.sum(dgmrf(xi) ** 2) + 1 / (sigma**2) * (y - xi).T @ (y - xi)
+    # jax.debug.print("log_det {p} \n --------", p=log_det_G_theta)
+
+    # jax.debug.print("{p}", p=res_mcmc)
+    # jax.debug.print("{p}", p=log_det_G_theta)
+    # jax.debug.print("---")
+    # jax.debug.print("{p}, {pp}, {ppp}", p=params["dgmrf"], pp=params["nu_phi"],
+    #        ppp=params["log_S_phi"])
 
     # jax.debug.print("{x}", x=(-log_det_S_phi, log_sigma,-log_det_G_theta, res_mcmc))
     # ELBO divided by N as stated in the supp material
@@ -62,4 +82,5 @@ def dgmrf_elbo(params, static, y, key, N, Nq, M):
         1 / N * (0.5 * log_det_S_phi - M * log_sigma + log_det_G_theta - 0.5 * res_mcmc)
     )
     # Note that we return -elbo
+    # jax.debug.print("{p}", p=elbo_val)
     return -elbo_val

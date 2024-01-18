@@ -37,6 +37,7 @@ class ConvLayer(eqx.Module):
     def efficient_logdet_G_l(self):
         """
         Efficient computation of the determinant of a G_l (Proposition 2)
+        of Siden 2020.
         """
         a = ConvLayer.params_transform_light(self.params)
 

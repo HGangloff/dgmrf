@@ -32,7 +32,6 @@ def train_loop(
         loss, grads = jax.value_and_grad(loss_fn)(
             params, static, y, subkey, *args, **kwargs
         )
-        # #jax.debug.print("{x}",x=(loss))
         updates, opt_state = tx.update(grads, opt_state, params)
         params = optax.apply_updates(params, updates)
         return (key, params, opt_state), loss
