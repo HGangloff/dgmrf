@@ -117,11 +117,16 @@ class DGMRF(eqx.Module):
 
     def __call__(self, x, transpose=False):
         """
-        Return the composition of g = gLgL-1...g1(z0) with z0 = x
+        Return the composition of g = gLgL-1...g1(z0) with z0 = x if not
+        transpose. Return g = g1...gL-1gL(z0) if transpose
         """
         z_l_1 = x
-        for l in range(self.nb_layers):
-            z_l_1 = self.layers[l](z_l_1, transpose=transpose)
+        if transpose:
+            for l in reversed(range(self.nb_layers)):
+                z_l_1 = self.layers[l](z_l_1, transpose=True)
+        else:
+            for l in range(self.nb_layers):
+                z_l_1 = self.layers[l](z_l_1, transpose=False)
         return z_l_1
 
     def log_det(self):
@@ -155,9 +160,46 @@ class DGMRF(eqx.Module):
         )
         return mu
 
+    def get_QTilde(self, x, log_sigma):
+        Gx = self(x)
+        GTGx = self(Gx, transpose=True)
+        return GTGx.flatten() + 1 / (jnp.exp(log_sigma) ** 2) * x
+
+    def get_post_mu(self, y, log_sigma, mu0=None):
+        """
+        Compute the posterior mean with conjugate gradient as proposed in Siden
+        2020, Oskarsson 2022 and Lippert 2023. We know that mu_post =
+        (Q+1/sigma^2 I)^-1(-G^Tb+1/sigma^2 y) with b=g(0)
+        We can give tilde{Q}=Q+1/sigma^2 I as a function which tells how
+        to compute tilde{Q}x that's what we'll do to avoid explicitely
+        constructing G
+
+        Parameters
+        ----------
+        y
+            The observations
+        log_sigma
+            The parameter for the noise level
+        mu0
+            The initial guess for the posterior mean. Default is None.
+        """
+        # initial guess for the solution
+        b = self(jnp.zeros_like(mu0))
+
+        c = -self(b, transpose=True).flatten() + 1 / (jnp.exp(log_sigma) ** 2) * y
+
+        return jax.scipy.sparse.linalg.cg(
+            lambda x: self.get_QTilde(x, log_sigma), c, mu0
+        )[0]
+
     def sample(self, key):
         """
         Sample from the DGMRF
+
+        Parameters
+        ----------
+        key
+            A JAX random key
         """
         # from https://wandb.ai/sauravmaheshkar/RSNA-MICCAI/reports/How-to-Set-Random-Seeds-in-PyTorch-and-Tensorflow--VmlldzoxMDA2MDQy
         torch.manual_seed(key[0])
@@ -171,3 +213,80 @@ class DGMRF(eqx.Module):
             precision_matrix=torch.from_numpy(np.array(self.get_Q())),
         )
         return mvn.sample().numpy()
+
+    def posterior_samples(self, nb_samples, y, log_sigma, key, x0=None):
+        """
+        Perform posterior sample with perturbation as described in Siden 2020
+        for example. The approach has been proposed in Papandreou and Yuille
+        2010
+
+        Parameters
+        ----------
+        nb_samples
+            The number of posterior samples to draw
+        y
+            The observations
+        log_sigma
+            The parameter for the noise level
+        key
+            A JAX random key
+        x0
+            An initial get for the solution
+        """
+        b = self(jnp.zeros_like(y))
+
+        def get_one_posterior_sample(carry, _):
+            (key,) = carry
+            key, subkey1, subkey2 = jax.random.split(key, 3)
+            u1 = jax.random.normal(subkey1, shape=b.shape)
+            u2 = jax.random.normal(subkey2, shape=y.shape)
+            c_perturbed = -self((u1 - b), transpose=True).flatten() + 1 / (
+                jnp.exp(log_sigma) ** 2
+            ) * (y + jnp.exp(log_sigma) * u2)
+            xpost_CG, _ = jax.scipy.sparse.linalg.cg(
+                lambda x: self.get_QTilde(x, log_sigma), c_perturbed, x0
+            )
+            return (key,), xpost_CG
+
+        key, subkey = jax.random.split(key, 2)
+        _, x_post_samples = jax.lax.scan(
+            get_one_posterior_sample, (subkey,), jnp.arange(nb_samples)
+        )
+        return x_post_samples
+
+    def rbmc_variance(self, x_post_samples, log_sigma):
+        """
+        Get the Rao-Blackwellized Monte Carlo estimation for the variance as
+        done in Siden 2020 (introduced in Siden 2018).
+        We use a JVP-like way to get $G^TG$ for real. We know that we are
+        able to compute the matrix vector product $G^TG(x)$. Each time we
+        perform such a computation with $x$ being $0$ everywhere except
+        at one place, we reveal one column of $G^TG$.
+        So we do so repeatedly with a vmap.
+
+        Parameters
+        ----------
+        x_post_samples
+            A jnp.array with a list of posterior samples on the first axis.
+            Those are used to get our estimation
+        log_sigma
+            The parameter for the noise level
+        """
+        x_post_samples_demeaned = x_post_samples - jnp.mean(
+            x_post_samples, axis=0, keepdims=True
+        )
+        v_QTilde = jax.vmap(lambda x: self.get_QTilde(x, log_sigma))
+        diag_QTilde = jnp.diag(v_QTilde(jnp.eye(self.N)))
+        var_x_post_samples_RBMC = 1 / diag_QTilde + jnp.mean(
+            (
+                1
+                / diag_QTilde
+                * (
+                    v_QTilde(x_post_samples_demeaned)
+                    - diag_QTilde * x_post_samples_demeaned
+                )
+            )
+            ** 2,
+            axis=0,
+        )
+        return var_x_post_samples_RBMC

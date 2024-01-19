@@ -21,6 +21,9 @@ class GraphLayer(eqx.Module):
 
     def __init__(self, params, A, D, log_det_method, key=None):
         self.params = params
+        # NOTE, we will need to use A and D with stop_gradient operators every
+        # time we will use it as they currently appear as learnable parameter
+        # because of the equinox partition function
         self.A = A
         self.D = D
         self.log_det_method = log_det_method
@@ -56,12 +59,20 @@ class GraphLayer(eqx.Module):
         Return z = b + alpha*D^gamma *z_l-1 + beta * D^gamma-1 A z^l-1
         """
         p = GraphLayer.params_transform(self.params)
-        D, A = jax.lax.stop_gradient(self.D), jax.lax.stop_gradient(self.A)
-        z = (
-            p[3]
-            + p[0] * jnp.diag(D ** p[2]) @ z
-            + p[1] * jnp.diag(D ** (p[2] - 1)) @ A @ z
-        )
+        if transpose:
+            D, A = jax.lax.stop_gradient(self.D), jax.lax.stop_gradient(self.A)
+            z = (
+                p[3]
+                + p[0] * z @ jnp.diag(D ** p[2]).T
+                + p[1] * z @ A.T @ jnp.diag(D ** (p[2] - 1)).T
+            )
+        else:
+            D, A = jax.lax.stop_gradient(self.D), jax.lax.stop_gradient(self.A)
+            z = (
+                p[3]
+                + p[0] * jnp.diag(D ** p[2]) @ z
+                + p[1] * jnp.diag(D ** (p[2] - 1)) @ A @ z
+            )
         return z
 
     def efficient_logdet_G_l(self):
@@ -95,12 +106,15 @@ class GraphLayer(eqx.Module):
 
     @staticmethod
     def params_transform(params):
-        # NOTE the parametrizations in Oskarson 2022 and Lippert 2023 does not
-        # comply ?
-        alpha = params[0]  # jnp.exp(params[0])
-        beta = params[1]  # alpha * jnp.tanh(params[1])
-        # alpha = jnp.exp(params[0])
-        # beta = -alpha * jnp.tanh(params[1])
+        # NOTE as in the convolutional layer, we force beta to be negative and
+        # we chose to change tanh for exp in beta and we changed sigmoid for
+        # exp in gamma
+        # This is again to ensure the equivalency between the two types of
+        # layers for a given parametrization (see unit tests)
+        # alpha = params[0]  # jnp.exp(params[0])
+        # beta = params[1]  # alpha * jnp.tanh(params[1])
+        alpha = jnp.exp(params[0])
+        beta = -alpha * jnp.exp(params[1])
         gamma = jnp.exp(params[2])
         b = params[3]
         return jnp.array([alpha, beta, gamma, b])
@@ -110,8 +124,7 @@ class GraphLayer(eqx.Module):
         """
         Useful when initializing from desired params
         """
-        # theta1 = jnp.log(a_params[0])
-        # theta2 = jnp.log(a_params[1] / a_params[0])
-        theta3 = jnp.log(a_params[2])  # jnp.log(a_params[2] / (1 - a_params[2]))
-        # return jnp.array([theta1, theta2, theta3, a_params[3]])
-        return jnp.array([a_params[0], a_params[1], theta3, a_params[3]])
+        theta1 = jnp.log(a_params[0])
+        theta2 = jnp.log(-a_params[1] / a_params[0])
+        theta3 = jnp.log(a_params[2])
+        return jnp.array([theta1, theta2, theta3, a_params[3]])
