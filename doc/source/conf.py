@@ -5,7 +5,9 @@
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
+import os, sys
 
+sys.path.insert(0, os.path.abspath("../"))
 
 project = "dgmrf"
 copyright = "2023, INRAE, Agroparistech"
@@ -15,7 +17,7 @@ author = "Hugo Gangloff"
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
-    "sphinx.ext.napoleon",
+    "sphinx.ext.autosummary",
     "sphinx_rtd_theme",
     "nbsphinx",
     "sphinx.ext.viewcode",

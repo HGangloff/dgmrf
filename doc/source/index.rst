@@ -7,11 +7,17 @@ Welcome to dgmrf's documentation!
 =================================
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 5
    :caption: Contents:
 
-   ./dgmrf.rst
+   dgmrf.rst
 
+.. toctree::
+   :glob:
+   :maxdepth: 1
+   :caption: Code examples
+
+   notebooks/*
 
 
 Indices and tables
