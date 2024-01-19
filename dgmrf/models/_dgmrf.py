@@ -46,7 +46,8 @@ class DGMRF(eqx.Module):
             A tuple of integers (Height, Width) to create a convolutional DGMRF. Cannot be mutually equal to
             None with A_D. Default is None
         A_D
-            A tuple of jnp.array to designate the (Adjacency, Degree) matrices to create a graph DGMRF. Cannot
+            A tuple of jnp.array to designate the (Adjacency matrix,
+            **diagonal** of the Degree matrix) to create a graph DGMRF. Cannot
             be mutually equal to None with height_width. Defaut is None
         init_params
             Wether to use specific parameters for the DGMRF creation. If creating a convolutional DGMRF, init_params
