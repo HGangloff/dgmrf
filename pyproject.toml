@@ -31,5 +31,5 @@ dependencies = ["numpy", "jax", "optax", "equinox", "jax-tqdm", "torch"]
 notebook = ["jupyter", "matplotlib"]
 
 [project.urls]
-Repository = "https://gitlab.com/hugo.gangloff/dgmrf"
-Documentation = "https://hugo.gangloff.gitlab.io/dgmrf/index.html"
+Repository = "https://gitlab.com/hgangloff/dgmrf"
+Documentation = "https://hgangloff.gitlab.io/dgmrf/index.html"
