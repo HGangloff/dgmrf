@@ -17,11 +17,13 @@ class ConvLayer(eqx.Module):
     params: jax.Array
     H: int = eqx.field(static=True)
     W: int = eqx.field(static=True)
+    with_bias: bool
 
-    def __init__(self, params, H, W):
+    def __init__(self, params, H, W, with_bias=True):
         self.params = params
         self.H = H
         self.W = W
+        self.with_bias = with_bias
 
     def __call__(self, z, transpose=False):
         """
@@ -32,7 +34,10 @@ class ConvLayer(eqx.Module):
         if transpose:
             w = w.T
         Gz = jax.scipy.signal.convolve(z.reshape((self.H, self.W)), w, mode="same")
-        return (Gz + a[5]).flatten()
+        if self.with_bias:
+            return (Gz + a[5]).flatten()
+        else:
+            return Gz.flatten()
 
     def efficient_logdet_G_l(self):
         """

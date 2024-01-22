@@ -16,16 +16,18 @@ class GraphLayer(eqx.Module):
     A: jax.Array
     D: jax.Array
     log_det_method: str
+    with_bias: bool
     k_max: int
     precomputations: jax.Array
 
-    def __init__(self, params, A, D, log_det_method, key=None):
+    def __init__(self, params, A, D, log_det_method, with_bias=True, key=None):
         self.params = params
         # NOTE, we will need to use A and D with stop_gradient operators every
         # time we will use it as they currently appear as learnable parameter
         # because of the equinox partition function
         self.A = A
         self.D = D
+        self.with_bias = with_bias
         self.log_det_method = log_det_method
 
         if self.log_det_method == "eigenvalues":
@@ -62,17 +64,17 @@ class GraphLayer(eqx.Module):
         if transpose:
             D, A = jax.lax.stop_gradient(self.D), jax.lax.stop_gradient(self.A)
             z = (
-                p[3]
-                + p[0] * z @ jnp.diag(D ** p[2]).T
+                p[0] * z @ jnp.diag(D ** p[2]).T
                 + p[1] * z @ A.T @ jnp.diag(D ** (p[2] - 1)).T
             )
         else:
             D, A = jax.lax.stop_gradient(self.D), jax.lax.stop_gradient(self.A)
             z = (
-                p[3]
-                + p[0] * jnp.diag(D ** p[2]) @ z
+                p[0] * jnp.diag(D ** p[2]) @ z
                 + p[1] * jnp.diag(D ** (p[2] - 1)) @ A @ z
             )
+        if self.with_bias:
+            return z + p[3]
         return z
 
     def efficient_logdet_G_l(self):

@@ -76,6 +76,8 @@ class DGMRF(eqx.Module):
                             ConvLayer.params_transform_inverse(init_params[i]),
                             height_width[0],
                             height_width[1],
+                            *args,
+                            **kwargs,
                         )
                     )
                 else:
@@ -85,6 +87,8 @@ class DGMRF(eqx.Module):
                             jax.random.uniform(subkey, (7,), minval=-1, maxval=1),
                             height_width[0],
                             height_width[1],
+                            *args,
+                            **kwargs,
                         )
                     )
                 self.N = height_width[0] * height_width[1]
@@ -160,12 +164,18 @@ class DGMRF(eqx.Module):
         )
         return mu
 
-    def get_QTilde(self, x, log_sigma):
+    def get_QTilde(self, x, log_sigma, mask=None):
+        if mask is None:
+            mask = jnp.zeros_like(x)
+        if mask.dtype == bool:
+            mask = mask.astype(int)
         Gx = self(x)
         GTGx = self(Gx, transpose=True)
-        return GTGx.flatten() + 1 / (jnp.exp(log_sigma) ** 2) * x
+        return GTGx.flatten() + jnp.where(
+            mask == 0, 1 / (jnp.exp(log_sigma) ** 2) * x, 0
+        )
 
-    def get_post_mu(self, y, log_sigma, mu0=None):
+    def get_post_mu(self, y, log_sigma, mu0=None, mask=None):
         """
         Compute the posterior mean with conjugate gradient as proposed in Siden
         2020, Oskarsson 2022 and Lippert 2023. We know that mu_post =
@@ -182,14 +192,23 @@ class DGMRF(eqx.Module):
             The parameter for the noise level
         mu0
             The initial guess for the posterior mean. Default is None.
+        mask
+            A jnp.array of 0 or 1 or True or False. Binary mask of masked observed variables. 1
+            for masked, 0 for observed. Default is None
         """
-        # initial guess for the solution
+        if mask is None:
+            mask = jnp.zeros_like(y)
+        if mask.dtype == bool:
+            mask = mask.astype(int)
+
         b = self(jnp.zeros_like(mu0))
 
-        c = -self(b, transpose=True).flatten() + 1 / (jnp.exp(log_sigma) ** 2) * y
+        c = -self(b, transpose=True).flatten() + jnp.where(
+            mask == 0, 1 / (jnp.exp(log_sigma) ** 2) * y, 0
+        )
 
         return jax.scipy.sparse.linalg.cg(
-            lambda x: self.get_QTilde(x, log_sigma), c, mu0
+            lambda x: self.get_QTilde(x, log_sigma, mask), c, mu0
         )[0]
 
     def sample(self, key):
