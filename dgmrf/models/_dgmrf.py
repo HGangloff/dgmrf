@@ -119,19 +119,19 @@ class DGMRF(eqx.Module):
                     )
                 self.N = A_D[0].shape[0]
 
-    def __call__(self, x, transpose=False):
+    def __call__(self, x, transpose=False, with_bias=True):
         """
         Return the composition of g = gLgL-1...g1(z0) with z0 = x if not
         transpose. Return g = g1...gL-1gL(z0) if transpose
         """
-        z_l_1 = x
+        z = x
         if transpose:
             for l in reversed(range(self.nb_layers)):
-                z_l_1 = self.layers[l](z_l_1, transpose=True)
+                z = self.layers[l](z, transpose=transpose, with_bias=with_bias)
         else:
             for l in range(self.nb_layers):
-                z_l_1 = self.layers[l](z_l_1, transpose=False)
-        return z_l_1
+                z = self.layers[l](z, transpose=transpose, with_bias=with_bias)
+        return z
 
     def log_det(self):
         """
@@ -147,8 +147,8 @@ class DGMRF(eqx.Module):
         Get the precision matrix of the DGMRF using the formula Q = G^TG
         """
         G = self.layers[0].get_G()
-        for _ in range(self.nb_layers - 1):
-            G = G @ self.layers[0].get_G()
+        for l in range(self.nb_layers - 1):
+            G = self.layers[l + 1].get_G() @ G
         return G.T @ G
 
     def get_mu(self):
@@ -157,10 +157,10 @@ class DGMRF(eqx.Module):
         """
 
         def G(x):
-            return self(x)
+            return self(x, with_bias=False)
 
         mu, _ = jax.scipy.sparse.linalg.cg(
-            G, self(jnp.zeros((self.N,))), x0=jnp.zeros((self.N,))
+            G, self(jnp.zeros((self.N,)), with_bias=True), x0=jnp.zeros((self.N,))
         )
         return mu
 
@@ -169,11 +169,10 @@ class DGMRF(eqx.Module):
             mask = jnp.zeros_like(x)
         if mask.dtype == bool:
             mask = mask.astype(int)
-        Gx = self(x)
-        GTGx = self(Gx, transpose=True)
-        return GTGx.flatten() + jnp.where(
-            mask == 0, 1 / (jnp.exp(log_sigma) ** 2) * x, 0
-        )
+
+        Gx = self(x, with_bias=False)
+        GTGx = self(Gx, transpose=True, with_bias=False)
+        return GTGx + jnp.where(mask == 0, 1 / (jnp.exp(log_sigma) ** 2) * x, 0)
 
     def get_post_mu(self, y, log_sigma, mu0=None, mask=None):
         """
@@ -201,14 +200,16 @@ class DGMRF(eqx.Module):
         if mask.dtype == bool:
             mask = mask.astype(int)
 
-        b = self(jnp.zeros_like(mu0))
+        b = self(jnp.zeros_like(mu0), with_bias=True)
 
-        c = -self(b, transpose=True).flatten() + jnp.where(
+        c = -self(b, transpose=True, with_bias=False) + jnp.where(
             mask == 0, 1 / (jnp.exp(log_sigma) ** 2) * y, 0
         )
 
         return jax.scipy.sparse.linalg.cg(
-            lambda x: self.get_QTilde(x, log_sigma, mask), c, mu0
+            lambda x: self.get_QTilde(x, log_sigma, mask),
+            c,
+            mu0,  # maxiter
         )[0]
 
     def sample(self, key):
@@ -252,14 +253,14 @@ class DGMRF(eqx.Module):
         x0
             An initial get for the solution
         """
-        b = self(jnp.zeros_like(y))
+        b = self(jnp.zeros_like(y), with_bias=True)
 
         def get_one_posterior_sample(carry, _):
             (key,) = carry
             key, subkey1, subkey2 = jax.random.split(key, 3)
             u1 = jax.random.normal(subkey1, shape=b.shape)
             u2 = jax.random.normal(subkey2, shape=y.shape)
-            c_perturbed = -self((u1 - b), transpose=True).flatten() + 1 / (
+            c_perturbed = -self((u1 - b), transpose=True, with_bias=False) + 1 / (
                 jnp.exp(log_sigma) ** 2
             ) * (y + jnp.exp(log_sigma) * u2)
             xpost_CG, _ = jax.scipy.sparse.linalg.cg(

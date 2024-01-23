@@ -16,7 +16,7 @@ class GraphLayer(eqx.Module):
     A: jax.Array
     D: jax.Array
     log_det_method: str
-    with_bias: bool
+    with_bias: bool = eqx.field(static=True)
     k_max: int
     precomputations: jax.Array
 
@@ -56,7 +56,7 @@ class GraphLayer(eqx.Module):
                 u = jax.random.normal(subkey, shape=(A.shape[0], 1))
                 self.precomputations.at[k - 1].set((u.T @ DAD @ u).squeeze())
 
-    def __call__(self, z, transpose=False):
+    def __call__(self, z, transpose=False, with_bias=True):
         """
         Return z = b + alpha*D^gamma *z_l-1 + beta * D^gamma-1 A z^l-1
         """
@@ -73,7 +73,7 @@ class GraphLayer(eqx.Module):
                 p[0] * jnp.diag(D ** p[2]) @ z
                 + p[1] * jnp.diag(D ** (p[2] - 1)) @ A @ z
             )
-        if self.with_bias:
+        if self.with_bias and with_bias:
             return z + p[3]
         return z
 

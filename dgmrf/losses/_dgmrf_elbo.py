@@ -50,7 +50,7 @@ def dgmrf_elbo(params, static, y, key, N, Nq, mask=None):
         eps = jax.random.normal(subkey, (N,))
         xi = params["nu_phi"] + jnp.sqrt(S_phi) * eps
 
-        g_xi = dgmrf(xi).flatten()
+        g_xi = dgmrf(xi, with_bias=True)
         y_centered_masked = jnp.where(mask == 0, y - xi, 0)
         res = g_xi.T @ g_xi + 1 / (sigma**2) * jnp.sum(y_centered_masked**2)
         return (key,), res
