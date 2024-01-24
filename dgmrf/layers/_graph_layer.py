@@ -77,26 +77,30 @@ class GraphLayer(eqx.Module):
             return z + p[3]
         return z
 
-    def efficient_logdet_G_l(self):
+    def mean_logdet_G(self):
         """
         Efficient computation of the determinant of a G_l. We currently
         implemented the eigenvalue method (Section 3.1.1 of Oskarsson 2022)
         """
         p = GraphLayer.params_transform(self.params)
         if self.log_det_method == "eigenvalue":
-            return jnp.sum(
+            return jnp.mean(
                 p[2] * jnp.log(jax.lax.stop_gradient(self.D))
                 + jnp.log(p[0] + p[1] * jax.lax.stop_gradient(self.precomputations))
             )
         if self.log_det_method == "power_series":
             return (
-                self.A.shape[0] * jnp.log(p[0])
-                + jnp.sum(p[2] * jnp.log(jax.lax.stop_gradient(self.D)))
-                + jnp.sum(
-                    jnp.array(
-                        [-1 / k * (-p[1] / p[0]) ** k for k in range(1, self.k_max)]
+                1
+                / self.A.shape[0]
+                * (
+                    self.A.shape[0] * jnp.log(p[0])
+                    + jnp.sum(p[2] * jnp.log(jax.lax.stop_gradient(self.D)))
+                    + jnp.sum(
+                        jnp.array(
+                            [-1 / k * (-p[1] / p[0]) ** k for k in range(1, self.k_max)]
+                        )
+                        * jax.lax.stop_gradient(self.precomputations)
                     )
-                    * jax.lax.stop_gradient(self.precomputations)
                 )
             )
 

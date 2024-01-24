@@ -84,7 +84,8 @@ class DGMRF(eqx.Module):
                     self.key, subkey = jax.random.split(self.key, 2)
                     self.layers.append(
                         ConvLayer(
-                            jax.random.uniform(subkey, (7,), minval=-1, maxval=1),
+                            # jax.random.uniform(subkey, (7,), minval=-1, maxval=1),
+                            jax.random.normal(subkey, (7,)) * 0.1,
                             height_width[0],
                             height_width[1],
                             *args,
@@ -109,7 +110,8 @@ class DGMRF(eqx.Module):
                     self.key, subkey1, subkey2 = jax.random.split(self.key, 3)
                     self.layers.append(
                         GraphLayer(
-                            jax.random.uniform(subkey1, (4,), minval=-1, maxval=1),
+                            # jax.random.uniform(subkey1, (4,), minval=-1, maxval=1),
+                            jax.random.normal(subkey1, (4,)) * 0.1,
                             A_D[0],
                             A_D[1],
                             *args,
@@ -133,13 +135,13 @@ class DGMRF(eqx.Module):
                 z = self.layers[l](z, transpose=transpose, with_bias=with_bias)
         return z
 
-    def log_det(self):
+    def mean_logdet(self):
         """
         Compute the log determinant
         """
         log_det = 0
         for l in range(self.nb_layers):
-            log_det += self.layers[l].efficient_logdet_G_l()
+            log_det += self.layers[l].mean_logdet_G()
         return log_det
 
     def get_Q(self):

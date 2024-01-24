@@ -52,26 +52,22 @@ def dgmrf_elbo(params, static, y, key, N, Nq, mask=None):
 
         g_xi = dgmrf(xi, with_bias=True)
         y_centered_masked = jnp.where(mask == 0, y - xi, 0)
-        res = g_xi.T @ g_xi + 1 / (sigma**2) * jnp.sum(y_centered_masked**2)
+        res = jnp.mean(g_xi**2) + 1 / (sigma**2) * jnp.mean(y_centered_masked**2)
         return (key,), res
 
     _, accu_mcmc = jax.lax.scan(scan_Nq, (key,), jnp.arange(Nq))
     res_mcmc = jnp.mean(accu_mcmc)
 
-    log_det_S_phi = jnp.sum(params["log_S_phi"])
-    log_det_G_theta = dgmrf.log_det()
+    log_det_S_phi = jnp.mean(params["log_S_phi"])
+    log_det_G_theta = dgmrf.mean_logdet()
     log_sigma = params["log_sigma"]
 
     # ELBO divided by N as stated in the supp material
     elbo_val = (
-        1
-        / N
-        * (
-            0.5 * log_det_S_phi
-            - (1 - jnp.sum(mask)) * log_sigma
-            + log_det_G_theta
-            - 0.5 * res_mcmc
-        )
+        0.5 * log_det_S_phi
+        - 1 / N * (N - jnp.sum(mask)) * log_sigma
+        + log_det_G_theta
+        - 0.5 * res_mcmc
     )
     # Note that we return -elbo
     # jax.debug.print("{p}", p=elbo_val)

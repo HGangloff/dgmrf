@@ -39,7 +39,7 @@ class ConvLayer(eqx.Module):
             return (Gz + a[5]).flatten()
         return Gz.flatten()
 
-    def efficient_logdet_G_l(self):
+    def mean_logdet_G(self):
         """
         Efficient computation of the determinant of a G_l (Proposition 2)
         of Siden 2020.
@@ -59,7 +59,7 @@ class ConvLayer(eqx.Module):
 
         _, accu_log_det_ij = jax.lax.scan(scan_fun, (), jnp.arange(self.H * self.W))
 
-        return jnp.sum(accu_log_det_ij)
+        return jnp.mean(accu_log_det_ij)
 
     def get_G(self):
         a = ConvLayer.params_transform(self.params)
@@ -72,17 +72,17 @@ class ConvLayer(eqx.Module):
     @staticmethod
     def params_transform(params):
         a1 = jax.nn.softplus(params[0]) + jax.nn.softplus(params[1])
-        a2a4 = (jax.nn.softplus(params[0]) * jax.nn.tanh(params[2]) / 2) ** 2
+        sqrt_a2a4 = jax.nn.softplus(params[0]) * jax.nn.tanh(params[2]) / 2
         a4_a2 = jnp.exp(params[3])
-        a2 = jnp.sqrt(
-            a2a4 / a4_a2
-        )  # NOTE, we lost the fact that a2 and a4 could be negative ?
-        a4 = jnp.sqrt(a2a4 * a4_a2)
-        a3a5 = (jax.nn.softplus(params[1]) * jax.nn.tanh(params[4]) / 2) ** 2
+        a2 = sqrt_a2a4 / jnp.sqrt(a4_a2)
+        # NOTE, we lost the fact that a2 and a4 could be negative ?
+        a4 = sqrt_a2a4 * jnp.sqrt(a4_a2)
+        sqrt_a3a5 = jax.nn.softplus(params[1]) * jax.nn.tanh(params[4]) / 2
         a5_a3 = jnp.exp(params[5])
-        a3 = jnp.sqrt(a3a5 / a5_a3)
-        a5 = jnp.sqrt(a3a5 * a5_a3)
-        # NOTE we choose to consider the neighboring value as negatives !
+        a3 = sqrt_a3a5 / jnp.sqrt(a5_a3)
+        a5 = sqrt_a3a5 * jnp.sqrt(a5_a3)
+        # NOTE we choose to consider the neighboring values as negatives !
+        # To be able to have the equivalency between Conv and Graph layer
         return jnp.array([a1, -a2, -a3, -a4, -a5, params[6]])
 
     @staticmethod
