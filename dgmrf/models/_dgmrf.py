@@ -32,6 +32,7 @@ class DGMRF(eqx.Module):
         height_width=None,
         A_D=None,
         init_params=None,
+        non_linear=False,
         *args,
         **kwargs,
     ):
@@ -53,6 +54,11 @@ class DGMRF(eqx.Module):
             Wether to use specific parameters for the DGMRF creation. If creating a convolutional DGMRF, init_params
             is list of jnp.array([a[0], a[1], a[2], a[3], a[4], b]) for each layer
             If creating a graph DMGRF, init_params is a list of jnp.array([alpha, beta, gamma, b]) for each layer
+        non_linear
+            TO DO
+            A boolean. Whether we introduce non-linearities (Parametric ReLu
+            with learnt parameters) between the convolutional layers. Default
+            is False
         args
             Diverse arguments that will be passed to the layer init function
         kwargs
@@ -67,6 +73,7 @@ class DGMRF(eqx.Module):
 
         self.key = key
         self.nb_layers = nb_layers
+        self.non_linear = non_linear
         self.layers = []
         for i in range(self.nb_layers):
             if height_width is not None:
@@ -148,6 +155,11 @@ class DGMRF(eqx.Module):
         """
         Get the precision matrix of the DGMRF using the formula Q = G^TG
         """
+        if self.non_linear:
+            raise ValueError(
+                "Exact formula for Q is non available for " "non-linear DGMRF"
+            )
+
         G = self.layers[0].get_G()
         for l in range(self.nb_layers - 1):
             G = self.layers[l + 1].get_G() @ G
@@ -157,6 +169,10 @@ class DGMRF(eqx.Module):
         """
         mu = G^-1*b = G^-1*g(0). We invert G with conjugate gradient
         """
+        if self.non_linear:
+            raise ValueError(
+                "Exact formula for Q is non available for " "non-linear DGMRF"
+            )
 
         def G(x):
             return self(x, with_bias=False)
@@ -167,6 +183,11 @@ class DGMRF(eqx.Module):
         return mu
 
     def get_QTilde(self, x, log_sigma, mask=None):
+        if self.non_linear:
+            raise ValueError(
+                "Exact formula for Q is non available for " "non-linear DGMRF"
+            )
+
         if mask is None:
             mask = jnp.zeros_like(x)
         if mask.dtype == bool:
@@ -197,6 +218,11 @@ class DGMRF(eqx.Module):
             A jnp.array of 0 or 1 or True or False. Binary mask of masked observed variables. 1
             for masked, 0 for observed. Default is None
         """
+        if self.non_linear:
+            raise ValueError(
+                "Exact formula for Q is non available for " "non-linear DGMRF"
+            )
+
         if mask is None:
             mask = jnp.zeros_like(y)
         if mask.dtype == bool:
@@ -255,6 +281,11 @@ class DGMRF(eqx.Module):
         x0
             An initial get for the solution
         """
+        if self.non_linear:
+            raise ValueError(
+                "Exact formula for Q is non available for " "non-linear DGMRF"
+            )
+
         b = self(jnp.zeros_like(y), with_bias=True)
 
         def get_one_posterior_sample(carry, _):
@@ -294,6 +325,11 @@ class DGMRF(eqx.Module):
         log_sigma
             The parameter for the noise level
         """
+        if self.non_linear:
+            raise ValueError(
+                "Exact formula for Q is non available for " "non-linear DGMRF"
+            )
+
         x_post_samples_demeaned = x_post_samples - jnp.mean(
             x_post_samples, axis=0, keepdims=True
         )
