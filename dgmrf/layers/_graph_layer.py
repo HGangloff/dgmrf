@@ -20,7 +20,9 @@ class GraphLayer(eqx.Module):
     k_max: int
     precomputations: jax.Array
 
-    def __init__(self, params, A, D, log_det_method, with_bias=True, key=None):
+    def __init__(
+        self, params, A, D, log_det_method, with_bias=True, non_linear=False, key=None
+    ):
         self.params = params
         # NOTE, we will need to use A and D with stop_gradient operators every
         # time we will use it as they currently appear as learnable parameter
@@ -29,6 +31,7 @@ class GraphLayer(eqx.Module):
         self.D = D
         self.with_bias = with_bias
         self.log_det_method = log_det_method
+        self.non_linear = non_linear  # TODO
 
         if self.log_det_method == "eigenvalues":
             # Precomputation of the eigenvalues for the logdet

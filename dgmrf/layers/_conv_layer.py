@@ -18,12 +18,31 @@ class ConvLayer(eqx.Module):
     H: int = eqx.field(static=True)
     W: int = eqx.field(static=True)
     with_bias: bool = eqx.field(static=True)
+    non_linear: bool = eqx.field(static=True)
 
-    def __init__(self, params, H, W, with_bias=True):
+    def __init__(self, params, H, W, with_bias=True, non_linear=False):
+        """
+        Parameters
+        ----------
+        params
+            XXX
+        H
+            The height if the regular lattice (image)
+        W
+            The width if the regular lattice (image)
+        with_bias
+            A boolean. Whether to add a bias after the convolution. Default is
+            True
+        non_linear
+            A boolean. Whether we introduce non-linearities (Parametric ReLu
+            with learnt parameters) between the convolutional layers. Default
+            is False
+        """
         self.params = params
         self.H = H
         self.W = W
         self.with_bias = with_bias
+        self.non_linear = non_linear
 
     def __call__(self, z, transpose=False, with_bias=True):
         """
@@ -36,8 +55,11 @@ class ConvLayer(eqx.Module):
         #
         Gz = jax.scipy.signal.convolve2d(z.reshape((self.H, self.W)), w, mode="same")
         if self.with_bias and with_bias:
-            return (Gz + a[5]).flatten()
-        return Gz.flatten()
+            Gz = (Gz + a[5]).flatten()
+        if not self.non_linear:
+            a[6] = 0.0  # if linear DGMRF force a[6] = 0 to have leaky_relu eq to relu
+        # leaky_relu to be sure we maintain a bijection x<->z
+        return jax.nn.leaky_relu(Gz, negative_slope=a[6])
 
     def mean_logdet_G(self):
         """
@@ -83,7 +105,10 @@ class ConvLayer(eqx.Module):
         a5 = sqrt_a3a5 * jnp.sqrt(a5_a3)
         # NOTE we choose to consider the neighboring values as negatives !
         # To be able to have the equivalency between Conv and Graph layer
-        return jnp.array([a1, -a2, -a3, -a4, -a5, params[6]])
+        a7 = jnp.softplus(params[7])
+        # NOTE: no constraint on a6 which is the bias and positivity constraint
+        # on a7 which is the parameter of the Leaky Relu
+        return jnp.array([a1, -a2, -a3, -a4, -a5, params[6], a7])
 
     @staticmethod
     def params_transform_light(params):
@@ -107,4 +132,6 @@ class ConvLayer(eqx.Module):
         r4 = jnp.log(a_params[3] / a_params[1])
         r5 = jnp.arctanh(2 * jnp.sqrt(a_params[2] * a_params[4]) / jax.nn.softplus(r2))
         r6 = jnp.log(a_params[4] / a_params[2])
-        return jnp.array([r1, r2, r3, r4, r5, r6, a_params[-1]])
+        return jnp.array(
+            [r1, r2, r3, r4, r5, r6, a_params[5], inv_softplus(a_params[6])]
+        )

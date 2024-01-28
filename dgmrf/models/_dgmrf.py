@@ -24,6 +24,7 @@ class DGMRF(eqx.Module):
     nb_layers: int = eqx.field(static=True)
     layers: list
     N: int
+    non_linear: bool = eqx.field(static=True)
 
     def __init__(
         self,
@@ -32,7 +33,6 @@ class DGMRF(eqx.Module):
         height_width=None,
         A_D=None,
         init_params=None,
-        non_linear=False,
         *args,
         **kwargs,
     ):
@@ -54,11 +54,6 @@ class DGMRF(eqx.Module):
             Wether to use specific parameters for the DGMRF creation. If creating a convolutional DGMRF, init_params
             is list of jnp.array([a[0], a[1], a[2], a[3], a[4], b]) for each layer
             If creating a graph DMGRF, init_params is a list of jnp.array([alpha, beta, gamma, b]) for each layer
-        non_linear
-            TO DO
-            A boolean. Whether we introduce non-linearities (Parametric ReLu
-            with learnt parameters) between the convolutional layers. Default
-            is False
         args
             Diverse arguments that will be passed to the layer init function
         kwargs
@@ -73,7 +68,6 @@ class DGMRF(eqx.Module):
 
         self.key = key
         self.nb_layers = nb_layers
-        self.non_linear = non_linear
         self.layers = []
         for i in range(self.nb_layers):
             if height_width is not None:
@@ -92,7 +86,7 @@ class DGMRF(eqx.Module):
                     self.layers.append(
                         ConvLayer(
                             # jax.random.uniform(subkey, (7,), minval=-1, maxval=1),
-                            jax.random.normal(subkey, (7,)) * 0.1,
+                            jax.random.normal(subkey, (8,)) * 0.1,
                             height_width[0],
                             height_width[1],
                             *args,
