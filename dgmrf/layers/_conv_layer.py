@@ -55,11 +55,12 @@ class ConvLayer(eqx.Module):
         #
         Gz = jax.scipy.signal.convolve2d(z.reshape((self.H, self.W)), w, mode="same")
         if self.with_bias and with_bias:
-            Gz = (Gz + a[5]).flatten()
+            Gz += a[5]
         if not self.non_linear:
-            a[6] = 0.0  # if linear DGMRF force a[6] = 0 to have leaky_relu eq to relu
+            a = a.at[6].set(1.0)  # if linear DGMRF force a[6] = 1 to have
+            # leaky_relu eq to linear function
         # leaky_relu to be sure we maintain a bijection x<->z
-        return jax.nn.leaky_relu(Gz, negative_slope=a[6])
+        return jax.nn.leaky_relu(Gz, negative_slope=a[6]).flatten()
 
     def mean_logdet_G(self):
         """
@@ -105,7 +106,7 @@ class ConvLayer(eqx.Module):
         a5 = sqrt_a3a5 * jnp.sqrt(a5_a3)
         # NOTE we choose to consider the neighboring values as negatives !
         # To be able to have the equivalency between Conv and Graph layer
-        a7 = jnp.softplus(params[7])
+        a7 = jax.nn.softplus(params[7])
         # NOTE: no constraint on a6 which is the bias and positivity constraint
         # on a7 which is the parameter of the Leaky Relu
         return jnp.array([a1, -a2, -a3, -a4, -a5, params[6], a7])

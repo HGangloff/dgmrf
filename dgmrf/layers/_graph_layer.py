@@ -19,6 +19,7 @@ class GraphLayer(eqx.Module):
     with_bias: bool = eqx.field(static=True)
     k_max: int
     precomputations: jax.Array
+    non_linear: bool = eqx.field(static=True)
 
     def __init__(
         self, params, A, D, log_det_method, with_bias=True, non_linear=False, key=None

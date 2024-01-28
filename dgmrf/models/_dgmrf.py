@@ -67,6 +67,12 @@ class DGMRF(eqx.Module):
             )
 
         self.key = key
+
+        try:
+            self.non_linear = kwargs["non_linear"]
+        except KeyError:
+            self.non_linear = False
+
         self.nb_layers = nb_layers
         self.layers = []
         for i in range(self.nb_layers):
@@ -177,9 +183,12 @@ class DGMRF(eqx.Module):
         return mu
 
     def get_QTilde(self, x, log_sigma, mask=None):
+        """
+        QTilde = Q+1/sigma^2 I (see Sidén 2020)
+        """
         if self.non_linear:
             raise ValueError(
-                "Exact formula for Q is non available for " "non-linear DGMRF"
+                "Exact formula for Q is non available for non-linear DGMRF"
             )
 
         if mask is None:
@@ -191,14 +200,18 @@ class DGMRF(eqx.Module):
         GTGx = self(Gx, transpose=True, with_bias=False)
         return GTGx + jnp.where(mask == 0, 1 / (jnp.exp(log_sigma) ** 2) * x, 0)
 
-    def get_post_mu(self, y, log_sigma, mu0=None, mask=None):
+    def get_post_mu(self, y, log_sigma, mu0=None, mask=None, method="cg"):
         """
-        Compute the posterior mean with conjugate gradient as proposed in Siden
+        Compute the posterior mean
+
+        Either with conjugate gradient as proposed in Siden
         2020, Oskarsson 2022 and Lippert 2023. We know that mu_post =
         (Q+1/sigma^2 I)^-1(-G^Tb+1/sigma^2 y) with b=g(0)
         We can give tilde{Q}=Q+1/sigma^2 I as a function which tells how
         to compute tilde{Q}x that's what we'll do to avoid explicitely
         constructing G
+
+        Either with an exact inversion of \tilde{Q} in the previous formula
 
         Parameters
         ----------
@@ -211,10 +224,13 @@ class DGMRF(eqx.Module):
         mask
             A jnp.array of 0 or 1 or True or False. Binary mask of masked observed variables. 1
             for masked, 0 for observed. Default is None
+        method
+            A string. Either `"cg"` for conjugate gradient approach or
+            `"exact"`. Default is `"cg"`
         """
         if self.non_linear:
             raise ValueError(
-                "Exact formula for Q is non available for " "non-linear DGMRF"
+                "Exact formula for Q is non available for non-linear DGMRF"
             )
 
         if mask is None:
@@ -222,17 +238,34 @@ class DGMRF(eqx.Module):
         if mask.dtype == bool:
             mask = mask.astype(int)
 
-        b = self(jnp.zeros_like(mu0), with_bias=True)
+        if method == "cg":
+            b = self(jnp.zeros_like(mu0), with_bias=True)
+            c = -self(b, transpose=True, with_bias=False) + jnp.where(
+                mask == 0, 1 / (jnp.exp(log_sigma) ** 2) * y, 0
+            )
+            return jax.scipy.sparse.linalg.cg(
+                lambda x: self.get_QTilde(x, log_sigma, mask),
+                c,
+                mu0,
+            )[0]
+        if method == "exact":
+            Q = self.get_Q()
+            QTilde = Q + jnp.diag(
+                1
+                / (jnp.exp(log_sigma) ** 2)
+                * jnp.where(mask == 0, jnp.ones((self.N,)), 0)
+            )
+            inv_QTilde = jnp.linalg.inv(QTilde)
 
-        c = -self(b, transpose=True, with_bias=False) + jnp.where(
-            mask == 0, 1 / (jnp.exp(log_sigma) ** 2) * y, 0
-        )
-
-        return jax.scipy.sparse.linalg.cg(
-            lambda x: self.get_QTilde(x, log_sigma, mask),
-            c,
-            mu0,  # maxiter
-        )[0]
+            return inv_QTilde @ (
+                -self(
+                    self(jnp.zeros_like(y), with_bias=True),
+                    transpose=True,
+                    with_bias=False,
+                )
+                + 1 / (jnp.exp(log_sigma) ** 2) * (y)
+            )
+        raise ValueError("method argument must be either cg or exact")
 
     def sample(self, key):
         """
@@ -256,7 +289,7 @@ class DGMRF(eqx.Module):
         )
         return mvn.sample().numpy()
 
-    def posterior_samples(self, nb_samples, y, log_sigma, key, x0=None):
+    def posterior_samples(self, nb_samples, y, log_sigma, key, mask=None, x0=None):
         """
         Perform posterior sample with perturbation as described in Siden 2020
         for example. The approach has been proposed in Papandreou and Yuille
@@ -272,13 +305,21 @@ class DGMRF(eqx.Module):
             The parameter for the noise level
         key
             A JAX random key
+        mask
+            A jnp.array of 0 or 1 or True or False. Binary mask of masked observed variables. 1
+            for masked, 0 for observed. Default is None
         x0
-            An initial get for the solution
+            An initial guess for the solution
         """
         if self.non_linear:
             raise ValueError(
-                "Exact formula for Q is non available for " "non-linear DGMRF"
+                "Exact formula for Q is non available for non-linear DGMRF"
             )
+
+        if mask is None:
+            mask = jnp.zeros_like(y)
+        if mask.dtype == bool:
+            mask = mask.astype(int)
 
         b = self(jnp.zeros_like(y), with_bias=True)
 
@@ -287,21 +328,20 @@ class DGMRF(eqx.Module):
             key, subkey1, subkey2 = jax.random.split(key, 3)
             u1 = jax.random.normal(subkey1, shape=b.shape)
             u2 = jax.random.normal(subkey2, shape=y.shape)
-            c_perturbed = -self((u1 - b), transpose=True, with_bias=False) + 1 / (
+            c_perturbed = self((u1 - b), transpose=True, with_bias=False) + 1 / (
                 jnp.exp(log_sigma) ** 2
-            ) * (y + jnp.exp(log_sigma) * u2)
+            ) * (jnp.where(mask == 0, y + jnp.exp(log_sigma) * u2, 0))
             xpost_CG, _ = jax.scipy.sparse.linalg.cg(
-                lambda x: self.get_QTilde(x, log_sigma), c_perturbed, x0
+                lambda x: self.get_QTilde(x, log_sigma, mask), c_perturbed, x0
             )
             return (key,), xpost_CG
 
-        key, subkey = jax.random.split(key, 2)
         _, x_post_samples = jax.lax.scan(
-            get_one_posterior_sample, (subkey,), jnp.arange(nb_samples)
+            get_one_posterior_sample, (key,), jnp.arange(nb_samples)
         )
         return x_post_samples
 
-    def rbmc_variance(self, x_post_samples, log_sigma):
+    def rbmc_variance(self, x_post_samples, log_sigma, mask=None):
         """
         Get the Rao-Blackwellized Monte Carlo estimation for the variance as
         done in Siden 2020 (introduced in Siden 2018).
@@ -318,27 +358,40 @@ class DGMRF(eqx.Module):
             Those are used to get our estimation
         log_sigma
             The parameter for the noise level
+        mask
+            A jnp.array of 0 or 1 or True or False. Binary mask of masked observed variables. 1
+            for masked, 0 for observed. Default is None
         """
         if self.non_linear:
             raise ValueError(
-                "Exact formula for Q is non available for " "non-linear DGMRF"
+                "Exact formula for Q is non available for non-linear DGMRF"
             )
 
-        x_post_samples_demeaned = x_post_samples - jnp.mean(
-            x_post_samples, axis=0, keepdims=True
+        if mask is None:
+            mask = jnp.zeros_like(x_post_samples[0])
+        if mask.dtype == bool:
+            mask = mask.astype(int)
+
+        x_post_samples_demeaned = x_post_samples - jnp.where(
+            mask == 0, jnp.mean(x_post_samples, axis=0, keepdims=True), 0
         )
-        v_QTilde = jax.vmap(lambda x: self.get_QTilde(x, log_sigma))
+        v_QTilde = jax.vmap(lambda x: self.get_QTilde(x, log_sigma, mask))
         diag_QTilde = jnp.diag(v_QTilde(jnp.eye(self.N)))
-        var_x_post_samples_RBMC = 1 / diag_QTilde + jnp.mean(
-            (
-                1
-                / diag_QTilde
-                * (
-                    v_QTilde(x_post_samples_demeaned)
-                    - diag_QTilde * x_post_samples_demeaned
+        var_x_post_samples_RBMC = jnp.where(
+            mask == 0,
+            1 / diag_QTilde
+            + jnp.mean(
+                (
+                    1
+                    / diag_QTilde
+                    * (
+                        v_QTilde(x_post_samples_demeaned)
+                        - diag_QTilde * x_post_samples_demeaned
+                    )
                 )
-            )
-            ** 2,
-            axis=0,
+                ** 2,
+                axis=0,
+            ),
+            0,
         )
         return var_x_post_samples_RBMC
