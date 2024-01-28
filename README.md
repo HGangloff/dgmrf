@@ -38,7 +38,7 @@ pip install dgmrf
 
 # Documentation
 
-The project's documentation is available at [https://hgangloff.gitlab.io/dmgrf/index.html](https://hgangloff.gitlab.io/dgmrf/index.html)
+The project's documentation is available at [https://hgangloff.gitlab.io/dmgrf/index.html](https://hgangloff.gitlab.io/dgmrf/)
 
 # Contributing
 
