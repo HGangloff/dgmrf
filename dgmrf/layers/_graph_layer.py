@@ -32,7 +32,7 @@ class GraphLayer(eqx.Module):
         self.D = D
         self.with_bias = with_bias
         self.log_det_method = log_det_method
-        self.non_linear = non_linear  # TODO
+        self.non_linear = non_linear
 
         if self.log_det_method == "eigenvalues":
             # Precomputation of the eigenvalues for the logdet
@@ -79,7 +79,9 @@ class GraphLayer(eqx.Module):
             )
         if self.with_bias and with_bias:
             return z + p[3]
-        return z
+        if not self.non_linear:
+            p = p.at[3].set(1.0)
+        return jax.nn.leaky_relu(z, negative_slope=p[3]).flatten()
 
     def mean_logdet_G(self):
         """
@@ -127,14 +129,21 @@ class GraphLayer(eqx.Module):
         beta = -alpha * jnp.exp(params[1])
         gamma = jnp.exp(params[2])
         b = params[3]
-        return jnp.array([alpha, beta, gamma, b])
+        slope = jax.nn.softplus(params[4])
+        return jnp.array([alpha, beta, gamma, b, slope])
 
     @staticmethod
     def params_transform_inverse(a_params):
         """
         Useful when initializing from desired params
         """
+
+        def inv_softplus(x):
+            return jnp.log(jnp.exp(x) - 1)
+
         theta1 = jnp.log(a_params[0])
         theta2 = jnp.log(-a_params[1] / a_params[0])
         theta3 = jnp.log(a_params[2])
-        return jnp.array([theta1, theta2, theta3, a_params[3]])
+        return jnp.array(
+            [theta1, theta2, theta3, a_params[3], inv_softplus(a_params[4])]
+        )
