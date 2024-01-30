@@ -1,7 +1,11 @@
 dgmrf
 =====
 
-Deep Gaussian Markov Random Fields and their extensions. Non-official reimplementations of the following models (work in progress):
+Deep Gaussian Markov Random Fields and their extensions.
+
+We use JAX for very fast computations.
+
+Non-official reimplementations of the following models (work in progress):
 
 ```
 @inproceedings{siden2020deep,

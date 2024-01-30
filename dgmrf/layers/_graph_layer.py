@@ -60,28 +60,45 @@ class GraphLayer(eqx.Module):
                 u = jax.random.normal(subkey, shape=(A.shape[0], 1))
                 self.precomputations.at[k - 1].set((u.T @ DAD @ u).squeeze())
 
-    def __call__(self, z, transpose=False, with_bias=True):
+    def __call__(
+        self, z, transpose=False, with_bias=True, with_h=False, with_non_linearity=True
+    ):
         """
         Return z = b + alpha*D^gamma *z_l-1 + beta * D^gamma-1 A z^l-1
+
+        Parameters
+        ----------
+        z
+            Actually z_{l-1}, the input to the layer
+        transpose
+            boolean. Do we use the transpose of the kernel. Default is False
+        with_bias
+            boolean. Whether the bias is used. Default is True
+        with_h
+            boolean. Whether we return the non-activated result as second
+            output. Default is False
         """
         p = GraphLayer.params_transform(self.params)
         if transpose:
             D, A = jax.lax.stop_gradient(self.D), jax.lax.stop_gradient(self.A)
-            z = (
+            Gz = (
                 p[0] * z @ jnp.diag(D ** p[2]).T
                 + p[1] * z @ A.T @ jnp.diag(D ** (p[2] - 1)).T
             )
         else:
             D, A = jax.lax.stop_gradient(self.D), jax.lax.stop_gradient(self.A)
-            z = (
+            Gz = (
                 p[0] * jnp.diag(D ** p[2]) @ z
                 + p[1] * jnp.diag(D ** (p[2] - 1)) @ A @ z
             )
         if self.with_bias and with_bias:
-            return z + p[3]
-        if not self.non_linear:
-            p = p.at[3].set(1.0)
-        return jax.nn.leaky_relu(z, negative_slope=p[3]).flatten()
+            return Gz + p[3]
+        if (not self.non_linear) or (not with_non_linearity):
+            p = p.at[4].set(1.0)
+        activated_Gz = jax.nn.leaky_relu(Gz, negative_slope=p[4]).flatten()
+        if with_h:
+            return activated_Gz, Gz.flatten()
+        return activated_Gz
 
     def mean_logdet_G(self):
         """

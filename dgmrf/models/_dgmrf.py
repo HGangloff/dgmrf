@@ -91,7 +91,6 @@ class DGMRF(eqx.Module):
                     self.key, subkey = jax.random.split(self.key, 2)
                     self.layers.append(
                         ConvLayer(
-                            # jax.random.uniform(subkey, (7,), minval=-1, maxval=1),
                             jax.random.normal(subkey, (8,)) * 0.1,
                             height_width[0],
                             height_width[1],
@@ -117,7 +116,6 @@ class DGMRF(eqx.Module):
                     self.key, subkey1, subkey2 = jax.random.split(self.key, 3)
                     self.layers.append(
                         GraphLayer(
-                            # jax.random.uniform(subkey1, (4,), minval=-1, maxval=1),
                             jax.random.normal(subkey1, (4,)) * 0.1,
                             A_D[0],
                             A_D[1],
@@ -226,7 +224,10 @@ class DGMRF(eqx.Module):
             for masked, 0 for observed. Default is None
         method
             A string. Either `"cg"` for conjugate gradient approach or
-            `"exact"`. Default is `"cg"`
+            `"exact"`. Default is `"cg"`. __Note__ that the `"cg"` approach
+            seems very unstable as soon as we add more noise than that of
+            the context of the article (Siden 2020) (in which sigma=0.01, a
+            low noise) or when L>3
         """
         if self.non_linear:
             raise ValueError(

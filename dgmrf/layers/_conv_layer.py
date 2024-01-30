@@ -44,23 +44,39 @@ class ConvLayer(eqx.Module):
         self.with_bias = with_bias
         self.non_linear = non_linear
 
-    def __call__(self, z, transpose=False, with_bias=True):
+    def __call__(
+        self, z, transpose=False, with_bias=True, with_h=False, with_non_linearity=True
+    ):
         """
         Return z = G_lz_l-1 + b, i.e., apply one convolution
+
+        Parameters
+        ----------
+        z
+            Actually z_{l-1}, the input to the layer
+        transpose
+            boolean. Do we use the transpose of the kernel. Default is False
+        with_bias
+            boolean. Whether the bias is used. Default is True
+        with_h
+            boolean. Whether we return the non-activated result as second
+            output. Default is False
         """
         a = ConvLayer.params_transform(self.params)
         w = jnp.array([[0, a[2], 0], [a[1], a[0], a[3]], [0, a[4], 0]])
         if transpose:
             w = w.T
-        #
         Gz = jax.scipy.signal.convolve2d(z.reshape((self.H, self.W)), w, mode="same")
         if self.with_bias and with_bias:
             Gz += a[5]
-        if not self.non_linear:
+        if (not self.non_linear) or (not with_non_linearity):
             a = a.at[6].set(1.0)  # if linear DGMRF force a[6] = 1 to have
             # leaky_relu eq to linear function
         # leaky_relu to be sure we maintain a bijection x<->z
-        return jax.nn.leaky_relu(Gz, negative_slope=a[6]).flatten()
+        activated_Gz = jax.nn.leaky_relu(Gz, negative_slope=a[6]).flatten()
+        if with_h:
+            return activated_Gz, Gz.flatten()
+        return activated_Gz
 
     def mean_logdet_G(self):
         """
@@ -69,20 +85,20 @@ class ConvLayer(eqx.Module):
         """
         a = ConvLayer.params_transform_light(self.params)
 
-        def scan_fun(_, ij):
+        def log_det_one_pixel(ij):
             i, j = jnp.unravel_index(ij, (self.H, self.W))
-            log_det_ij = jnp.log(
-                jnp.abs(
-                    a[0]
-                    + 2 * jnp.sqrt(a[2]) * jnp.cos(jnp.pi * i / (self.H + 1))
-                    + 2 * jnp.sqrt(a[1]) * jnp.cos(jnp.pi * j / (self.W + 1))
-                )
+            det_ij = jnp.abs(
+                a[0]
+                + 2 * jnp.sqrt(a[2]) * jnp.cos(jnp.pi * i / (self.H + 1))
+                + 2 * jnp.sqrt(a[1]) * jnp.cos(jnp.pi * j / (self.W + 1))
             )
-            return (), log_det_ij
+            # return jnp.log(det_ij)
+            res = jax.lax.cond(det_ij > 1e-12, lambda _: det_ij, lambda _: 1e-12, None)
+            return jnp.log(res)
 
-        _, accu_log_det_ij = jax.lax.scan(scan_fun, (), jnp.arange(self.H * self.W))
+        v_log_det_one_pixel = jax.vmap(log_det_one_pixel)
 
-        return jnp.mean(accu_log_det_ij)
+        return jnp.mean(v_log_det_one_pixel(jnp.arange(self.H * self.W)))
 
     def get_G(self):
         a = ConvLayer.params_transform(self.params)
