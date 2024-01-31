@@ -17,7 +17,7 @@ class GraphLayer(eqx.Module):
     D: jax.Array
     log_det_method: str
     with_bias: bool = eqx.field(static=True)
-    k_max: int
+    k_max: int | None
     precomputations: jax.Array
     non_linear: bool = eqx.field(static=True)
 
@@ -47,6 +47,7 @@ class GraphLayer(eqx.Module):
             except RuntimeError:
                 # no GPU found so the computation is directly done on CPU
                 self.precomputations = jax.linalg.eigvals(D_1A)
+            self.k_max = None
         elif self.log_det_method == "power_series":
             # Precomputation of the Tr(\tilde{A}^K)=E[u.T@\tilde{A}@u]
             # (Hutchinson trace estimator)
@@ -59,6 +60,10 @@ class GraphLayer(eqx.Module):
                 key, subkey = jax.random.split(key, 2)
                 u = jax.random.normal(subkey, shape=(A.shape[0], 1))
                 self.precomputations.at[k - 1].set((u.T @ DAD @ u).squeeze())
+        else:
+            raise ValueError(
+                "log_det_method must be either eigenvalues " "or power_series"
+            )
 
     def __call__(
         self, z, transpose=False, with_bias=True, with_h=False, with_non_linearity=True
@@ -81,16 +86,10 @@ class GraphLayer(eqx.Module):
         p = GraphLayer.params_transform(self.params)
         if transpose:
             D, A = jax.lax.stop_gradient(self.D), jax.lax.stop_gradient(self.A)
-            Gz = (
-                p[0] * z @ jnp.diag(D ** p[2]).T
-                + p[1] * z @ A.T @ jnp.diag(D ** (p[2] - 1)).T
-            )
+            Gz = p[0] * z * D ** p[2] + p[1] * (z @ A.T) * D ** (p[2] - 1)
         else:
             D, A = jax.lax.stop_gradient(self.D), jax.lax.stop_gradient(self.A)
-            Gz = (
-                p[0] * jnp.diag(D ** p[2]) @ z
-                + p[1] * jnp.diag(D ** (p[2] - 1)) @ A @ z
-            )
+            Gz = p[0] * D ** p[2] * z + p[1] * D ** (p[2] - 1) * (A @ z)
         if self.with_bias and with_bias:
             return Gz + p[3]
         if (not self.non_linear) or (not with_non_linearity):
@@ -106,10 +105,12 @@ class GraphLayer(eqx.Module):
         implemented the eigenvalue method (Section 3.1.1 of Oskarsson 2022)
         """
         p = GraphLayer.params_transform(self.params)
-        if self.log_det_method == "eigenvalue":
+        if self.log_det_method == "eigenvalues":
             return jnp.mean(
                 p[2] * jnp.log(jax.lax.stop_gradient(self.D))
-                + jnp.log(p[0] + p[1] * jax.lax.stop_gradient(self.precomputations))
+                + jnp.log(
+                    jnp.abs(p[0] + p[1] * jax.lax.stop_gradient(self.precomputations))
+                )
             )
         if self.log_det_method == "power_series":
             return (
@@ -126,6 +127,7 @@ class GraphLayer(eqx.Module):
                     )
                 )
             )
+        raise ValueError("log_det_method must be either eigenvalues " "or power_series")
 
     def get_G(self):
         p = GraphLayer.params_transform(self.params)
