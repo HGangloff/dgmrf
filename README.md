@@ -3,9 +3,9 @@ dgmrf
 
 Deep Gaussian Markov Random Fields and their extensions.
 
-We use JAX for very fast computations.
+We use JAX for very fast computations. Check out the various notebooks to see what the library offers.
 
-Non-official reimplementations of the following models (work in progress):
+Non-official reimplementations of the following models (work in progress, not everything is included in the library yet):
 
 ```
 @inproceedings{siden2020deep,

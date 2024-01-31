@@ -34,6 +34,13 @@ class GraphLayer(eqx.Module):
         self.log_det_method = log_det_method
         self.non_linear = non_linear
 
+        if len(jnp.argwhere(jnp.sum(A, axis=1) == 0)) > 0:
+            raise ValueError(
+                "There are isolated edges in the graph "
+                "that we currently cannot handle. The formula below "
+                "would propagate NaNs (indeed, 1/self.D with 0-degree nodes)"
+            )
+
         if self.log_det_method == "eigenvalues":
             # Precomputation of the eigenvalues for the logdet
             D_1A = jnp.diag(1 / self.D) @ self.A
