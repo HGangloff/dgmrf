@@ -44,16 +44,18 @@ class DGMRF(eqx.Module):
         nb_layers
             An integer. The number of layers in the model
         height_width
-            A tuple of integers (Height, Width) to create a convolutional DGMRF. Cannot be mutually equal to
-            None with A_D. Default is None
+            A tuple of integers (Height, Width) to create a convolutional
+            DGMRF. Cannot be mutually equal to None with A_D. Default is None
         A_D
             A tuple of jnp.array to designate the (Adjacency matrix,
             **diagonal** of the Degree matrix) to create a graph DGMRF. Cannot
             be mutually equal to None with height_width. Defaut is None
         init_params
-            Wether to use specific parameters for the DGMRF creation. If creating a convolutional DGMRF, init_params
+            Wether to use specific parameters for the DGMRF creation.
+            If creating a convolutional DGMRF, init_params
             is list of jnp.array([a[0], a[1], a[2], a[3], a[4], b]) for each layer
-            If creating a graph DMGRF, init_params is a list of jnp.array([alpha, beta, gamma, b]) for each layer
+            If creating a graph DMGRF, init_params is a list of
+            jnp.array([alpha, beta, gamma, b]) for each layer
         args
             Diverse arguments that will be passed to the layer init function
         kwargs
@@ -149,19 +151,31 @@ class DGMRF(eqx.Module):
             log_det += self.layers[l].mean_logdet_G()
         return log_det
 
+    def get_G_composition(self):
+        """
+        Get the precision matrix of the DGMRF using the formula Q = G^TG
+        """
+        if self.non_linear:
+            raise ValueError(
+                "Exact formula for Q is non available for non-linear DGMRF"
+            )
+
+        G = self.layers[0].get_G()
+        for l in range(self.nb_layers - 1):
+            G = self.layers[l + 1].get_G() @ G
+        return G
+
     def get_Q(self):
         """
         Get the precision matrix of the DGMRF using the formula Q = G^TG
         """
         if self.non_linear:
             raise ValueError(
-                "Exact formula for Q is non available for " "non-linear DGMRF"
+                "Exact formula for Q is non available for non-linear DGMRF"
             )
 
-        G = self.layers[0].get_G()
-        for l in range(self.nb_layers - 1):
-            G = self.layers[l + 1].get_G() @ G
-        return G.T @ G
+        G_composition = self.get_G_composition()
+        return G_composition.T @ G_composition
 
     def get_mu(self):
         """
@@ -169,7 +183,7 @@ class DGMRF(eqx.Module):
         """
         if self.non_linear:
             raise ValueError(
-                "Exact formula for Q is non available for " "non-linear DGMRF"
+                "Exact formula for Q is non available for non-linear DGMRF"
             )
 
         def G(x):

@@ -39,26 +39,26 @@ def dgmrf_elbo(params, static, y, key, N, Nq, mask=None):
         mask = mask.astype(int)
 
     dgmrf = eqx.combine(params["dgmrf"], static["dgmrf"])
+    q_phi = eqx.combine(params["q_phi"], static["q_phi"])
+    log_sigma = params["log_sigma"]
 
     if dgmrf.non_linear:
-        return non_linear_dgmrf_elbo(dgmrf, params, static, y, key, N, Nq, mask)
-    return linear_dgmrf_elbo(dgmrf, params, static, y, key, N, Nq, mask)
+        return non_linear_dgmrf_elbo(dgmrf, q_phi, log_sigma, y, key, N, Nq, mask)
+    return linear_dgmrf_elbo(dgmrf, q_phi, log_sigma, y, key, N, Nq, mask)
 
 
-def linear_dgmrf_elbo(dgmrf, params, static, y, key, N, Nq, mask=None):
+def linear_dgmrf_elbo(dgmrf, q_phi, log_sigma, y, key, N, Nq, mask=None):
     """
     ELBO for linear DGMRF
     """
 
     # Some reparametrizations to avoid numerical errors
-    S_phi = jnp.exp(params["log_S_phi"])
-    sigma = jnp.exp(params["log_sigma"])
+    sigma = jnp.exp(log_sigma)
 
     def scan_Nq(carry, _):
         key = carry[0]
         key, subkey = jax.random.split(key, 2)
-        eps = jax.random.normal(subkey, (N,))
-        xi = params["nu_phi"] + jnp.sqrt(S_phi) * eps
+        xi = q_phi.sample(subkey)
 
         g_xi = dgmrf(xi, with_bias=True)
         y_centered_masked = jnp.where(mask == 0, y - xi, 0)
@@ -68,13 +68,12 @@ def linear_dgmrf_elbo(dgmrf, params, static, y, key, N, Nq, mask=None):
     _, accu_mcmc = jax.lax.scan(scan_Nq, (key,), jnp.arange(Nq))
     res_mcmc = jnp.mean(accu_mcmc)
 
-    log_det_S_phi = jnp.mean(params["log_S_phi"])
+    log_det_q = q_phi.mean_log_det()
     log_det_G_theta = dgmrf.mean_logdet()
-    log_sigma = params["log_sigma"]
 
     # ELBO divided by N as stated in the supp material
     elbo_val = (
-        0.5 * log_det_S_phi
+        0.5 * log_det_q
         - 1 / N * (N - jnp.sum(mask)) * log_sigma
         + log_det_G_theta
         - 0.5 * res_mcmc
@@ -84,7 +83,7 @@ def linear_dgmrf_elbo(dgmrf, params, static, y, key, N, Nq, mask=None):
     return -elbo_val
 
 
-def non_linear_dgmrf_elbo(dgmrf, params, static, y, key, N, Nq, mask=None):
+def non_linear_dgmrf_elbo(dgmrf, q_phi, log_sigma, y, key, N, Nq, mask=None):
     """
     ELBO for non-linear DGMRF
     """
@@ -99,14 +98,12 @@ def non_linear_dgmrf_elbo(dgmrf, params, static, y, key, N, Nq, mask=None):
         )
 
     # Some reparametrizations to avoid numerical errors
-    S_phi = jnp.exp(params["log_S_phi"])
-    sigma = jnp.exp(params["log_sigma"])
+    sigma = jnp.exp(log_sigma)
 
     def scan_Nq(carry, _):
         key = carry[0]
         key, subkey = jax.random.split(key, 2)
-        eps = jax.random.normal(subkey, (N,))
-        xi = params["nu_phi"] + jnp.sqrt(S_phi) * eps
+        xi = q_phi.sample(subkey)
 
         z = xi
         log_det = 0
@@ -132,10 +129,9 @@ def non_linear_dgmrf_elbo(dgmrf, params, static, y, key, N, Nq, mask=None):
     _, accu_mcmc = jax.lax.scan(scan_Nq, (key,), jnp.arange(Nq))
     res_mcmc = jnp.mean(accu_mcmc)
 
-    log_det_S_phi = jnp.mean(params["log_S_phi"])
-    log_sigma = params["log_sigma"]
+    log_det_q = q_phi.mean_log_det()
 
-    elbo_val = 0.5 * log_det_S_phi - 1 / N * (N - jnp.sum(mask)) * log_sigma - res_mcmc
+    elbo_val = 0.5 * log_det_q - 1 / N * (N - jnp.sum(mask)) * log_sigma - res_mcmc
     # Note that we return -elbo
     # jax.debug.print("{p}", p=elbo_val)
     return -elbo_val

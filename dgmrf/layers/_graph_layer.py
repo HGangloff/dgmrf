@@ -69,7 +69,7 @@ class GraphLayer(eqx.Module):
                 self.precomputations.at[k - 1].set((u.T @ DAD @ u).squeeze())
         else:
             raise ValueError(
-                "log_det_method must be either eigenvalues " "or power_series"
+                "log_det_method must be either eigenvalues or power_series"
             )
 
     def __call__(
@@ -101,9 +101,9 @@ class GraphLayer(eqx.Module):
             return Gz + p[3]
         if (not self.non_linear) or (not with_non_linearity):
             p = p.at[4].set(1.0)
-        activated_Gz = jax.nn.leaky_relu(Gz, negative_slope=p[4]).flatten()
+        activated_Gz = jax.nn.leaky_relu(Gz, negative_slope=p[4])
         if with_h:
-            return activated_Gz, Gz.flatten()
+            return activated_Gz, Gz
         return activated_Gz
 
     def mean_logdet_G(self):
@@ -134,7 +134,7 @@ class GraphLayer(eqx.Module):
                     )
                 )
             )
-        raise ValueError("log_det_method must be either eigenvalues " "or power_series")
+        raise ValueError("log_det_method must be either eigenvalues or power_series")
 
     def get_G(self):
         p = GraphLayer.params_transform(self.params)
