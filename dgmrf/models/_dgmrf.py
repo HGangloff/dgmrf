@@ -150,6 +150,11 @@ class DGMRF(eqx.Module):
         for l in range(self.nb_layers):
             log_det += self.layers[l].mean_logdet_G()
         return log_det
+        # return jax.tree_util.tree_reduce(
+        #    lambda x, y: y @ x,
+        #    [self.layers[l].mean_logdet_G() for l in range(self.nb_layers - 1)],
+        #    initializer=self.layers[0].get_G()
+        # )
 
     def get_G_composition(self):
         """
@@ -164,6 +169,12 @@ class DGMRF(eqx.Module):
         for l in range(self.nb_layers - 1):
             G = self.layers[l + 1].get_G() @ G
         return G
+
+        # return jax.tree_util.tree_reduce(
+        #    lambda x, y: y @ x,
+        #    [self.layers[l + 1].get_G() for l in range(self.nb_layers - 1)],
+        #    initializer=self.layers[0].get_G()
+        # )
 
     def get_Q(self):
         """

@@ -34,13 +34,13 @@ class VariationalDistribution(eqx.Module):
         with an abstract get method is called Template Method
 
         Note that S is a vector when using MeanField but a matrix when using
-        FactorizedS, hence the @ operator below
+        FactorizedS, hence the condition
         """
         nu, S = self.get_variational_params()
         key, subkey = jax.random.split(key, 2)
         eps = jax.random.normal(subkey, (self.N,))
-        print(S.shape)
-        print((S @ eps).shape)
+        if S.ndim == 1:
+            return nu + S * eps
         return nu + S @ eps
 
     @abstractmethod
@@ -139,10 +139,11 @@ class FactorizedS(VariationalDistribution):
         r"""
         S=diag(\xi_1,...,\xi_N) G diag(\tau_1,...,\tau_N)
         """
-        return (
-            jnp.diag(jnp.exp(self.params["log_xi"]))
-            @ self._dgmrf.get_G_composition()
-            @ jnp.diag(jnp.exp(self.params["log_tau"]))
+        return jnp.einsum(
+            "i, ik, k -> ik",
+            jnp.exp(self.params["log_xi"]),
+            self._dgmrf.get_G_composition(),
+            jnp.exp(self.params["log_tau"]),
         )
 
     def get_variational_params(self):
