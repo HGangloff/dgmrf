@@ -52,6 +52,20 @@ build_package:
   tags:
     - docker
 
+publish_package:
+  stage: publish
+  image: "python:3.9"
+  before_script:
+    - pip install twine
+  script:
+    - TWINE_PASSWORD=${PYPI_UPLOAD_TOKEN}
+      TWINE_USERNAME=__token__
+      python -m twine upload dist/*
+  tags:
+    - docker
+  only:
+    - tags
+
 pages:
   stage: publish
   image: "python:3.9"
