@@ -1,6 +1,7 @@
 """
 The ELBO for Deep Gaussian Markov Random Fields
 """
+
 import jax
 import jax.numpy as jnp
 import equinox as eqx

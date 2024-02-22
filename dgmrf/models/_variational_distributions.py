@@ -56,6 +56,7 @@ class MeanField(VariationalDistribution):
     q_{phi}(x)=N(x,\nu,SS^T) with \nu\in\mathbb{R}^N and log_S=diag(\log\sigma_1,
     ..., \log\sigma_N)
     """
+
     params: dict
 
     def __init__(self, N, nu_init=None, log_S_init=None, key=None):
@@ -91,6 +92,7 @@ class FactorizedS(VariationalDistribution):
     where G is either a convolutional DGMRF layer or a graph DGMRF layer
     (or even a composition of such layers). To implement
     """
+
     params: dict
     _dgmrf: eqx.Module
 

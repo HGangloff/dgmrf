@@ -1,6 +1,7 @@
 """
 Main training loop
 """
+
 import jax
 import jax.numpy as jnp
 from jax_tqdm import scan_tqdm
