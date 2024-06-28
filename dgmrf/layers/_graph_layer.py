@@ -5,6 +5,8 @@ Graph layer
 import equinox as eqx
 import jax
 import jax.numpy as jnp
+from jax.experimental import sparse
+from jaxtyping import Float, Int, Array, Key, Bool
 
 
 class GraphLayer(eqx.Module):
@@ -12,23 +14,22 @@ class GraphLayer(eqx.Module):
     Define one layer of a DGMRF graph parametrization
     """
 
-    params: jax.Array
-    A: jax.Array
-    D: jax.Array
+    params: Array
+    A: Array = eqx.field(static=True)
+    D: Array = eqx.field(static=True)
     log_det_method: str
-    with_bias: bool = eqx.field(static=True)
-    k_max: int | None
-    precomputations: jax.Array
-    non_linear: bool = eqx.field(static=True)
+    with_bias: Bool = eqx.field(static=True)
+    k_max: Int = None
+    precomputations: Array
+    non_linear: Bool = eqx.field(static=True)
 
     def __init__(
         self, params, A, D, log_det_method, with_bias=True, non_linear=False, key=None
     ):
         self.params = params
-        # NOTE, we will need to use A and D with stop_gradient operators every
-        # time we will use it as they currently appear as learnable parameter
-        # because of the equinox partition function
-        self.A = A
+        # NOTE that after eqx filterings, A and D still appears as learnable
+        # parameters, hence they need to be declared as static
+        self.A = sparse.BCOO.fromdense(A)
         self.D = D
         self.with_bias = with_bias
         self.log_det_method = log_det_method
@@ -53,7 +54,7 @@ class GraphLayer(eqx.Module):
                 self.precomputations = jax.device_put(eigen_D_1A, gpu)
             except RuntimeError:
                 # no GPU found so the computation is directly done on CPU
-                self.precomputations = jax.linalg.eigvals(D_1A)
+                self.precomputations = jnp.linalg.eigvals(D_1A)
             self.k_max = None
         elif self.log_det_method == "power_series":
             # Precomputation of the Tr(\tilde{A}^K)=E[u.T@\tilde{A}@u]
@@ -92,11 +93,11 @@ class GraphLayer(eqx.Module):
         """
         p = GraphLayer.params_transform(self.params)
         if transpose:
-            D, A = jax.lax.stop_gradient(self.D), jax.lax.stop_gradient(self.A)
-            Gz = p[0] * z * D ** p[2] + p[1] * (z @ A.T) * D ** (p[2] - 1)
+            Gz = p[0] * z * self.D ** p[2] + p[1] * (z @ self.A.T) * self.D ** (
+                p[2] - 1
+            )
         else:
-            D, A = jax.lax.stop_gradient(self.D), jax.lax.stop_gradient(self.A)
-            Gz = p[0] * D ** p[2] * z + p[1] * D ** (p[2] - 1) * (A @ z)
+            Gz = p[0] * self.D ** p[2] * z + p[1] * self.D ** (p[2] - 1) * (self.A @ z)
         if self.with_bias and with_bias:
             return Gz + p[3]
         if (not self.non_linear) or (not with_non_linearity):
@@ -114,10 +115,8 @@ class GraphLayer(eqx.Module):
         p = GraphLayer.params_transform(self.params)
         if self.log_det_method == "eigenvalues":
             return jnp.mean(
-                p[2] * jnp.log(jax.lax.stop_gradient(self.D))
-                + jnp.log(
-                    jnp.abs(p[0] + p[1] * jax.lax.stop_gradient(self.precomputations))
-                )
+                p[2] * jnp.log(self.D)
+                + jnp.log(jnp.abs(p[0] + p[1] * self.precomputations))
             )
         if self.log_det_method == "power_series":
             return (
@@ -125,12 +124,12 @@ class GraphLayer(eqx.Module):
                 / self.A.shape[0]
                 * (
                     self.A.shape[0] * jnp.log(p[0])
-                    + jnp.sum(p[2] * jnp.log(jax.lax.stop_gradient(self.D)))
+                    + jnp.sum(p[2] * jnp.log(self.D))
                     + jnp.sum(
                         jnp.array(
                             [-1 / k * (-p[1] / p[0]) ** k for k in range(1, self.k_max)]
                         )
-                        * jax.lax.stop_gradient(self.precomputations)
+                        * self.precomputations
                     )
                 )
             )
@@ -138,8 +137,10 @@ class GraphLayer(eqx.Module):
 
     def get_G(self):
         p = GraphLayer.params_transform(self.params)
-        D, A = jax.lax.stop_gradient(self.D), jax.lax.stop_gradient(self.A)
-        G = p[0] * jnp.diag(D ** p[2]) + p[1] * jnp.diag(D ** (p[2] - 1)) @ A
+        G = (
+            p[0] * jnp.diag(self.D ** p[2])
+            + p[1] * jnp.diag(self.D ** (p[2] - 1)) @ self.A
+        )
         return G
 
     @staticmethod

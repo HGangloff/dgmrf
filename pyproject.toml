@@ -25,7 +25,7 @@ classifiers = [
   "Development Status :: 4 - Beta",
   "Programming Language :: Python",
 ]
-dependencies = ["numpy", "jax", "optax", "equinox", "jax-tqdm", "torch"]
+dependencies = ["torch", "numpy", "jax", "optax", "equinox"]
 
 [project.optional-dependencies]
 notebook = ["jupyter", "matplotlib"]

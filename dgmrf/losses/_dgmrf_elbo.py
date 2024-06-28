@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import equinox as eqx
 
 
-def dgmrf_elbo(params, static, y, key, N, Nq, mask=None):
+def dgmrf_elbo(model, y, key, N, Nq, mask=None):
     """
     Parameters
     ----------
@@ -39,13 +39,13 @@ def dgmrf_elbo(params, static, y, key, N, Nq, mask=None):
     if mask.dtype == bool:
         mask = mask.astype(int)
 
-    dgmrf = eqx.combine(params["dgmrf"], static["dgmrf"])
-    q_phi = eqx.combine(params["q_phi"], static["q_phi"])
-    log_sigma = params["log_sigma"]
-
-    if dgmrf.non_linear:
-        return non_linear_dgmrf_elbo(dgmrf, q_phi, log_sigma, y, key, N, Nq, mask)
-    return linear_dgmrf_elbo(dgmrf, q_phi, log_sigma, y, key, N, Nq, mask)
+    if model.dgmrf.non_linear:
+        return non_linear_dgmrf_elbo(
+            model.dgmrf, model.posterior, model.noise_parameter, y, key, N, Nq, mask
+        )
+    return linear_dgmrf_elbo(
+        model.dgmrf, model.posterior, model.noise_parameter, y, key, N, Nq, mask
+    )
 
 
 def linear_dgmrf_elbo(dgmrf, q_phi, log_sigma, y, key, N, Nq, mask=None):

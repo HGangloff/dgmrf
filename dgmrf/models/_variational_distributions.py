@@ -90,7 +90,7 @@ class FactorizedS(VariationalDistribution):
     q_{phi}(x)=N(x,\nu,SS^T) with \nu\ni\mathbb{R}^N and
     S=diag(\xi_1,...,\xi_N) G diag(\tau_1,...,\tau_N)
     where G is either a convolutional DGMRF layer or a graph DGMRF layer
-    (or even a composition of such layers). To implement
+    (or even a composition of such layers).
     """
 
     params: dict

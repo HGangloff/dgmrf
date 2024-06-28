@@ -1,5 +1,7 @@
 import pytest
 import jax
+
+jax.config.update("jax_platforms", "cpu")
 import jax.numpy as jnp
 from dgmrf.models import DGMRF
 from dgmrf.utils import get_adjacency_matrix_lattice

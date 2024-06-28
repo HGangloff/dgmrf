@@ -40,6 +40,8 @@ Install the latest version with pip
 pip install dgmrf
 ```
 
+Note that it may be simpler to install jax GPU version with torch CPU only version
+
 # Documentation
 
 The project's documentation is available at [https://hgangloff.gitlab.io/dmgrf/index.html](https://hgangloff.gitlab.io/dgmrf/)
