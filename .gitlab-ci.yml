@@ -1,4 +1,4 @@
-image: "registry.gitlab.com/mia_jinns/docker-image-quarto-jax-sphinx:main"
+image: "registry.gitlab.com/mia_jinns/saas-linux-small-amd64-image-quarto-jax-sphinx:main"
 
 stages:
   - linting
@@ -12,7 +12,7 @@ black:
   script:
     - black --check --verbose -- .
   tags:
-    - docker
+    - saas-linux-small-amd64
 
 run_tests:
   stage: tests
@@ -36,7 +36,7 @@ build_doc:
     untracked: true
     expire_in: 1 week
   tags:
-    - docker
+    - saas-linux-small-amd64
 
 build_package:
   stage: build
@@ -50,7 +50,7 @@ build_package:
     untracked: true
     expire_in: 1 week
   tags:
-    - docker
+    - saas-linux-small-amd64
 
 publish_package:
   stage: publish
@@ -62,7 +62,7 @@ publish_package:
       TWINE_USERNAME=__token__
       python -m twine upload dist/*
   tags:
-    - docker
+    - saas-linux-small-amd64
   only:
     - tags
 
@@ -76,6 +76,6 @@ pages:
     paths:
     - public
   tags:
-    - docker
+    - saas-linux-small-amd64
   only:
     - main
