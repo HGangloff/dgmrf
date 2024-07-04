@@ -98,11 +98,14 @@ class GraphLayer(eqx.Module):
             )
         else:
             Gz = p[0] * self.D ** p[2] * z + p[1] * self.D ** (p[2] - 1) * (self.A @ z)
+        # jax.debug.print("Gz {x}", x=Gz)
         if self.with_bias and with_bias:
-            return Gz + p[3]
+            Gz += p[3]
+        # jax.debug.print("biased Gz {x}", x=Gz)
         if (not self.non_linear) or (not with_non_linearity):
             p = p.at[4].set(1.0)
         activated_Gz = jax.nn.leaky_relu(Gz, negative_slope=p[4])
+        # jax.debug.print("activated Gz {x}", x=activated_Gz)
         if with_h:
             return activated_Gz, Gz
         return activated_Gz
@@ -153,8 +156,10 @@ class GraphLayer(eqx.Module):
         # alpha = params[0]  # jnp.exp(params[0])
         # beta = params[1]  # alpha * jnp.tanh(params[1])
         alpha = jnp.exp(params[0])
-        beta = -alpha * jnp.exp(params[1])
-        gamma = jnp.exp(params[2])
+        # beta = -alpha * jnp.exp(params[1])
+        beta = alpha * jax.nn.tanh(params[1])
+        # gamma = jnp.exp(params[2])
+        gamma = jax.nn.sigmoid(params[2])
         b = params[3]
         slope = jax.nn.softplus(params[4])
         return jnp.array([alpha, beta, gamma, b, slope])
@@ -169,8 +174,10 @@ class GraphLayer(eqx.Module):
             return jnp.log(jnp.exp(x) - 1)
 
         theta1 = jnp.log(a_params[0])
-        theta2 = jnp.log(-a_params[1] / a_params[0])
-        theta3 = jnp.log(a_params[2])
+        # theta2 = jnp.log(-a_params[1] / a_params[0])
+        theta2 = jnp.arctanh(a_params[1] / a_params[0])
+        # theta3 = jnp.log(a_params[2])
+        theta3 = jnp.log(a_params[2] / (1 - a_params[2]))
         return jnp.array(
             [theta1, theta2, theta3, a_params[3], inv_softplus(a_params[4])]
         )
