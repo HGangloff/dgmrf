@@ -1,7 +1,8 @@
 import pytest
-import jax
+import os
 
-jax.config.update("jax_platforms", "cpu")
+os.environ["JAX_PLATFORMS"] = "cpu"
+import jax
 import jax.numpy as jnp
 from dgmrf.models import DGMRF
 from dgmrf.utils import get_adjacency_matrix_lattice
@@ -45,7 +46,7 @@ def test_eqality_mu_post_algo_convolutional():
         jnp.sum(
             jnp.round(mu_post_exact, decimals=2) == jnp.round(mu_post_cg, decimals=2)
         )
-        == 1178
+        == 1597
     )
 
 
@@ -67,7 +68,7 @@ def test_eqality_mu_post_algo_graph():
         L,
         A_D=(get_adjacency_matrix_lattice(H, W), 4 * jnp.ones(H * W)),
         init_params=[jnp.array([1.0, -1.0, 1.0, 0.0])],
-        log_det_method="power_series",
+        log_det_method="eigenvalues",
     )
 
     key, subkey = jax.random.split(key, 2)
@@ -88,5 +89,5 @@ def test_eqality_mu_post_algo_graph():
         jnp.sum(
             jnp.round(mu_post_exact, decimals=2) == jnp.round(mu_post_cg, decimals=2)
         )
-        == 1178
+        == 1598
     )

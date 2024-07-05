@@ -1,2 +1,2 @@
-from ._utils import get_adjacency_matrix_lattice
+from ._utils import get_adjacency_matrix_lattice, get_N_y_D_A, get_y_with_mask_and_noise
 from ._cholesky_sampling import cholesky_sampling_gaussian_field

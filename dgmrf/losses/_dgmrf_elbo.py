@@ -56,19 +56,19 @@ def linear_dgmrf_elbo(dgmrf, q_phi, log_sigma, y, key, N, Nq, mask=None):
     # Some reparametrizations to avoid numerical errors
     sigma = jnp.exp(log_sigma)
 
-    # def scan_Nq(carry, _):
-    # key = carry[0]
-    key, subkey = jax.random.split(key, 2)
-    xi = q_phi.sample(subkey)
+    def scan_Nq(carry, _):
+        key = carry[0]
+        key, subkey = jax.random.split(key, 2)
+        xi = q_phi.sample(subkey)
 
-    g_xi = dgmrf(xi, with_bias=True)
-    y_centered_masked = jnp.where(mask == 0, y - xi, 0)
-    res = jnp.mean(g_xi**2) + 1 / (sigma**2) * jnp.mean(y_centered_masked**2)
+        g_xi = dgmrf(xi, with_bias=True)
+        y_centered_masked = jnp.where(mask == 0, y - xi, 0)
+        res = jnp.mean(g_xi**2) + 1 / (sigma**2) * jnp.mean(y_centered_masked**2)
 
-    #    return (key,), res
+        return (key,), res
 
-    # _, accu_mcmc = jax.lax.scan(scan_Nq, (key,), jnp.arange(Nq))
-    accu_mcmc = res
+    _, accu_mcmc = jax.lax.scan(scan_Nq, (key,), jnp.arange(Nq))
+    # accu_mcmc = res
     res_mcmc = jnp.mean(accu_mcmc)
 
     log_det_q = q_phi.mean_log_det()

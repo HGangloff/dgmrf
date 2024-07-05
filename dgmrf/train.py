@@ -60,8 +60,8 @@ def train_loop(
 
         loss_values.append(-loss_value)
         if i % print_rate == 0:
-            print(f"Iteration {i}, loss_value = {loss_value}")
+            print(f"Iteration {i}, loss_value = {-loss_value}")
 
-    print(f"End of training (iteration {n_iter}), loss_value = {loss_value}")
+    print(f"End of training (iteration {n_iter}), loss_value = {-loss_value}")
 
     return model, jnp.array(loss_values), OptState

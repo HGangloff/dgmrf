@@ -221,7 +221,8 @@ class DGMRF(eqx.Module):
 
         Gx = self(x, with_bias=False)
         GTGx = self(Gx, transpose=True, with_bias=False)
-        return GTGx + jnp.where(mask == 0, 1 / (jnp.exp(log_sigma) ** 2) * x, 0)
+        # return GTGx + jnp.where(mask == 0, 1 / (jnp.exp(log_sigma) ** 2) * x, 0)
+        return GTGx + 1 / (jnp.exp(log_sigma) ** 2) * x
 
     def get_post_mu(self, y, log_sigma, mu0=None, mask=None, method="cg"):
         """
@@ -276,11 +277,7 @@ class DGMRF(eqx.Module):
             )[0]
         if method == "exact":
             Q = self.get_Q()
-            QTilde = Q + jnp.diag(
-                1
-                / (jnp.exp(log_sigma) ** 2)
-                * jnp.where(mask == 0, jnp.ones((self.N,)), 0)
-            )
+            QTilde = Q + jnp.diag(1 / (jnp.exp(log_sigma) ** 2) * jnp.ones(self.N))
             inv_QTilde = jnp.linalg.inv(QTilde)
 
             return inv_QTilde @ (
@@ -289,7 +286,10 @@ class DGMRF(eqx.Module):
                     transpose=True,
                     with_bias=False,
                 )
-                + 1 / (jnp.exp(log_sigma) ** 2) * (y)
+                + 1
+                / (jnp.exp(log_sigma) ** 2)
+                * (y)
+                * jnp.where(mask == 0, jnp.ones((self.N,)), 0)
             )
         raise ValueError("method argument must be either cg or exact")
 
