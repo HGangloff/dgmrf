@@ -8,6 +8,10 @@ Welcome to dgmrf's documentation!
 
 Changelog:
 
+* v0.1.1:
+
+    - Major code improvements for graph-DGMRF. We now have posterior means from exact and approximate computations.
+
 * v0.1.0:
 
     - Major improvements and code cleaning. Satisfying results for the graph DGMRF now (no more stop_gradient, now using a BCOO A matrix that speed up a lot computations). All notebooks have been updated.
