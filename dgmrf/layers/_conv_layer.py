@@ -62,6 +62,7 @@ class ConvLayer(eqx.Module):
             boolean. Whether we return the non-activated result as second
             output. Default is False
         """
+        non_linear = self.non_linear and with_non_linearity
         a = ConvLayer.params_transform(self.params)
         w = jnp.array([[0, a[2], 0], [a[1], a[0], a[3]], [0, a[4], 0]])
         if transpose:
@@ -69,11 +70,10 @@ class ConvLayer(eqx.Module):
         Gz = jax.scipy.signal.convolve2d(z.reshape((self.H, self.W)), w, mode="same")
         if self.with_bias and with_bias:
             Gz += a[5]
-        if (not self.non_linear) or (not with_non_linearity):
-            a = a.at[6].set(1.0)  # if linear DGMRF force a[6] = 1 to have
-            # leaky_relu eq to linear function
-        # leaky_relu to be sure we maintain a bijection x<->z
-        activated_Gz = jax.nn.leaky_relu(Gz, negative_slope=a[6]).flatten()
+        if not non_linear:
+            activated_Gz = Gz.flatten()
+        else:
+            activated_Gz = jax.nn.leaky_relu(Gz, negative_slope=a[6]).flatten()
         if with_h:
             return activated_Gz, Gz.flatten()
         return activated_Gz
@@ -125,14 +125,14 @@ class ConvLayer(eqx.Module):
         a7 = jax.nn.softplus(params[7])
         # NOTE: no constraint on a6 which is the bias and positivity constraint
         # on a7 which is the parameter of the Leaky Relu
-        return jnp.array([a1, -a2, -a3, -a4, -a5, params[6], a7])
+        return (a1, -a2, -a3, -a4, -a5, params[6], a7)
 
     @staticmethod
     def params_transform_light(params):
         a1 = jax.nn.softplus(params[0]) + jax.nn.softplus(params[1])
         a2a4 = (jax.nn.softplus(params[0]) * jax.nn.tanh(params[2]) / 2) ** 2
         a3a5 = (jax.nn.softplus(params[1]) * jax.nn.tanh(params[4]) / 2) ** 2
-        return jnp.array([a1, a2a4, a3a5])
+        return (a1, a2a4, a3a5)
 
     @staticmethod
     def params_transform_inverse(a_params):
@@ -149,6 +149,4 @@ class ConvLayer(eqx.Module):
         r4 = jnp.log(a_params[3] / a_params[1])
         r5 = jnp.arctanh(2 * jnp.sqrt(a_params[2] * a_params[4]) / jax.nn.softplus(r2))
         r6 = jnp.log(a_params[4] / a_params[2])
-        return jnp.array(
-            [r1, r2, r3, r4, r5, r6, a_params[5], inv_softplus(a_params[6])]
-        )
+        return (r1, r2, r3, r4, r5, r6, a_params[5], inv_softplus(a_params[6]))

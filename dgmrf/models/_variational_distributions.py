@@ -141,6 +141,9 @@ class FactorizedS(VariationalDistribution):
         r"""
         S=diag(\xi_1,...,\xi_N) G diag(\tau_1,...,\tau_N)
         """
+        # return (jnp.exp(self.params["log_xi"][:, None]) *
+        #        (jnp.exp(self.params["log_tau"][:, None]) *
+        #            self._dgmrf.get_G_composition()))
         return jnp.einsum(
             "i, ik, k -> ik",
             jnp.exp(self.params["log_xi"]),
