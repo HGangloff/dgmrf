@@ -46,7 +46,7 @@ def test_eqality_mu_post_algo_convolutional():
         jnp.sum(
             jnp.round(mu_post_exact, decimals=2) == jnp.round(mu_post_cg, decimals=2)
         )
-        == 1597
+        == 1599
     )
 
 
@@ -89,5 +89,5 @@ def test_eqality_mu_post_algo_graph():
         jnp.sum(
             jnp.round(mu_post_exact, decimals=2) == jnp.round(mu_post_cg, decimals=2)
         )
-        == 1598
+        == 1599
     )
