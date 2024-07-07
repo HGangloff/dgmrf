@@ -114,15 +114,15 @@ def get_y_with_mask_and_noise(y, mask_size, key, true_sigma_noise=None):
     A random mask of size mask_size will be applied to y
     If a noise std is given, noise will be added to y
     """
+    if true_sigma_noise is not None:
+        key, subkey = jax.random.split(key, 2)
+        y = y + jax.random.normal(subkey, y.shape) * true_sigma_noise
+
     mask = jnp.zeros_like(y)
     key, subkey = jax.random.split(key, 2)
     idx_unobserved = jax.random.choice(
         subkey, jnp.arange(y.shape[0]), shape=(mask_size,), replace=False
     )
     mask = mask.at[idx_unobserved].set(1)
-    y = jnp.where(mask == 0, y, 0)
-    if true_sigma_noise is not None:
-        key, subkey = jax.random.split(key, 2)
-        y = y + jax.random.normal(subkey, y.shape) * true_sigma_noise
-
-    return y, mask
+    y_masked = jnp.where(mask == 0, y, 0)
+    return y, y_masked, mask

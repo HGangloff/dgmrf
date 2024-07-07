@@ -150,15 +150,10 @@ class DGMRF(eqx.Module):
         for l in range(self.nb_layers):
             log_det += self.layers[l].mean_logdet_G()
         return log_det
-        # return jax.tree_util.tree_reduce(
-        #    lambda x, y: y @ x,
-        #    [self.layers[l].mean_logdet_G() for l in range(self.nb_layers - 1)],
-        #    initializer=self.layers[0].get_G()
-        # )
 
     def get_G_composition(self):
         """
-        Get the precision matrix of the DGMRF using the formula Q = G^TG
+        Get G=G_LG_{L-1}...G_1
         """
         if self.non_linear:
             raise ValueError(
@@ -169,12 +164,6 @@ class DGMRF(eqx.Module):
         for l in range(self.nb_layers - 1):
             G = self.layers[l + 1].get_G() @ G
         return G
-
-        # return jax.tree_util.tree_reduce(
-        #    lambda x, y: y @ x,
-        #    [self.layers[l + 1].get_G() for l in range(self.nb_layers - 1)],
-        #    initializer=self.layers[0].get_G()
-        # )
 
     def get_Q(self):
         """
@@ -221,8 +210,7 @@ class DGMRF(eqx.Module):
 
         Gx = self(x, with_bias=False)
         GTGx = self(Gx, transpose=True, with_bias=False)
-        # return GTGx + jnp.where(mask == 0, 1 / (jnp.exp(log_sigma) ** 2) * x, 0)
-        return GTGx + 1 / (jnp.exp(log_sigma) ** 2) * x
+        return GTGx + jnp.where(mask == 0, 1 / (jnp.exp(log_sigma) ** 2) * x, 0)
 
     def get_post_mu(self, y, log_sigma, mu0=None, mask=None, method="cg"):
         """
@@ -266,7 +254,7 @@ class DGMRF(eqx.Module):
             mask = mask.astype(int)
 
         if method == "cg":
-            b = self(jnp.zeros_like(mu0), with_bias=True)
+            b = self(jnp.zeros_like(y), with_bias=True)
             c = -self(b, transpose=True, with_bias=False) + jnp.where(
                 mask == 0, 1 / (jnp.exp(log_sigma) ** 2) * y, 0
             )
@@ -277,7 +265,11 @@ class DGMRF(eqx.Module):
             )[0]
         if method == "exact":
             Q = self.get_Q()
-            QTilde = Q + jnp.diag(1 / (jnp.exp(log_sigma) ** 2) * jnp.ones(self.N))
+            QTilde = Q + jnp.diag(
+                1
+                / (jnp.exp(log_sigma) ** 2)
+                * jnp.where(mask == 0, jnp.ones((self.N,)), 0)
+            )
             inv_QTilde = jnp.linalg.inv(QTilde)
 
             return inv_QTilde @ (

@@ -19,6 +19,8 @@ class GraphLayer(eqx.Module):
     # parameters, hence they need to be declared as static
     A: Array = eqx.field(static=True)
     D: Array = eqx.field(static=True)
+    # declaring as static the next attribute is not mandatory because it is
+    # filtered out with the eqx.filtering methods before any JAX transformation
     log_det_method: str
     with_bias: Bool = eqx.field(static=True)
     k_max: Int = None
@@ -117,8 +119,8 @@ class GraphLayer(eqx.Module):
         non_linear = self.non_linear and with_non_linearity
         p = GraphLayer.params_transform(self.params, with_slope=non_linear)
         if transpose:
-            Gz = p[0] * z * self.D ** p[2] + p[1] * (z @ self.A.T) * self.D ** (
-                p[2] - 1
+            Gz = p[0] * self.D ** p[2] * z + p[1] * self.D ** (p[2] - 1) * (
+                self.A.T @ z
             )
         else:
             Gz = p[0] * self.D ** p[2] * z + p[1] * self.D ** (p[2] - 1) * (self.A @ z)
@@ -149,7 +151,7 @@ class GraphLayer(eqx.Module):
                 / self.A.shape[0]
                 * (
                     self.A.shape[0] * jnp.log(p[0])
-                    + jnp.sum(p[2] * jnp.log(self.D))
+                    + jnp.sum(jax.lax.stop_gradient(p[2]) * jnp.log(self.D))
                     + jnp.sum(
                         jnp.array(
                             [-1 / k * (-p[1] / p[0]) ** k for k in range(1, self.k_max)]
