@@ -8,6 +8,10 @@ Welcome to dgmrf's documentation!
 
 Changelog:
 
+* v0.2.0:
+
+    - Consistent results between conv-DGMRF and graph-DGMRF. All formula must be correct now.
+
 * v0.1.1:
 
     - Major code improvements for graph-DGMRF. We now have posterior means from exact and approximate computations.
