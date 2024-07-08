@@ -8,6 +8,10 @@ Welcome to dgmrf's documentation!
 
 Changelog:
 
+* v0.2.1:
+
+    - Add large graph support with power series and other modifications
+
 * v0.2.0:
 
     - Consistent results between conv-DGMRF and graph-DGMRF. All formula must be correct now.

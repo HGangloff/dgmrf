@@ -104,7 +104,10 @@ def get_N_y_D_A(filename):
     # Compute the diagonal of the degree matrix. It will not be in BCOO format
     D = jnp.sum(A, axis=1).astype(jnp.int32)
 
-    A = BCOO.fromdense(A)
+    print(f"Graph has {N} nodes with {jnp.sum(D)} edges")
+    print(
+        f"Adjacency matrix has {jnp.sum(D)/(A.shape[0]*A.shape[1]):.4f} % non zero entries"
+    )
 
     return N, y, D, A
 

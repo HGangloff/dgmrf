@@ -8,6 +8,7 @@ import torch
 from torch.distributions import MultivariateNormal
 import jax
 import jax.numpy as jnp
+from jax.experimental.sparse import BCOO
 
 from dgmrf.layers._graph_layer import GraphLayer
 from dgmrf.layers._conv_layer import ConvLayer
@@ -74,6 +75,17 @@ class DGMRF(eqx.Module):
             self.non_linear = kwargs["non_linear"]
         except KeyError:
             self.non_linear = False
+
+        if A_D is not None:
+            # if graph layers
+            # make logdet precomputations here. They are the same for all
+            # the layers
+            self.key, subkey = jax.random.split(self.key, 2)
+            precomputations, k_max = GraphLayer.get_precomputations_for_loget(
+                kwargs["log_det_method"], *A_D, subkey
+            )
+            kwargs["precomputations"] = precomputations
+            kwargs["k_max"] = k_max
 
         self.nb_layers = nb_layers
         self.layers = []
@@ -161,8 +173,14 @@ class DGMRF(eqx.Module):
             )
 
         G = self.layers[0].get_G()
+        if isinstance(G, BCOO):
+            G = G.todense()  # because matrix product of two BCOO will make
+            # memory overflow (see note in _graph_layer.py)
         for l in range(self.nb_layers - 1):
-            G = self.layers[l + 1].get_G() @ G
+            G_ = self.layers[l + 1].get_G()
+            if isinstance(G_, BCOO):
+                G_ = G_.todense()
+            G = G_ @ G
         return G
 
     def get_Q(self):
@@ -264,6 +282,7 @@ class DGMRF(eqx.Module):
                 mu0,
             )[0]
         if method == "exact":
+            # TODO perform this computation on CPU
             Q = self.get_Q()
             QTilde = Q + jnp.diag(
                 1

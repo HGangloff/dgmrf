@@ -24,17 +24,23 @@ class GraphLayer(eqx.Module):
     log_det_method: str
     with_bias: Bool = eqx.field(static=True)
     k_max: Int = None
-    precomputations: Array
+    precomputations: Array = None
     non_linear: Bool = eqx.field(static=True)
 
     def __init__(
-        self, params, A, D, log_det_method, with_bias=True, non_linear=False, key=None
+        self,
+        params,
+        A,
+        D,
+        log_det_method,
+        with_bias=True,
+        non_linear=False,
+        precomputations=None,
+        k_max=None,
+        key=None,
     ):
         self.params = params
-        if not isinstance(A, BCOO):
-            self.A = BCOO.fromdense(A)
-        else:
-            self.A = A
+        self.A = A
         self.D = D
         self.with_bias = with_bias
         self.log_det_method = log_det_method
@@ -47,25 +53,51 @@ class GraphLayer(eqx.Module):
                 "would propagate NaNs (indeed, 1/self.D with 0-degree nodes)"
             )
 
+        if precomputations is not None:
+            self.precomputations = precomputations
+            self.k_max = k_max
+        else:
+            precomputations, k_max = GraphLayer.get_precomputations_for_loget(
+                self.log_det_method, self.A, self.D, key
+            )
+
+            # NOTE that while precomputations with power_series require dense matrices because of
+            # matrix products, we do not have such products appearing in any
+            # other operation (except get_G() see below),
+            # therefore we will work with BCOO for speed efficiency
+        if not isinstance(self.A, BCOO):
+            self.A = BCOO.fromdense(self.A)
+
+    @staticmethod
+    def get_precomputations_for_loget(log_det_method, A, D, key):
+        # NOTE that we expect a dense matrix here: remove the use sparse matrix for now
+        # see https://github.com/google/jax/issues/14821#issuecomment-1458523095
+        # JAX must prepare for worst case nse in the resulting matrix product of
+        # two BCOO which will almost always explode our memory
+        if log_det_method == "power_series" and isinstance(A, BCOO):
+            A = BCOO.todense(A)
+
+        print("Precomputing quantities for log determinant approximation...")
         cpu = jax.devices("cpu")[0]
         try:
             gpu = jax.devices("gpu")[0]
         except:
             gpu = cpu  # there is no GPU
 
-        if self.log_det_method == "eigenvalues":
+        if log_det_method == "eigenvalues":
             # Precomputation of the eigenvalues for the logdet
-            D_1A = jnp.diag(1 / self.D) @ self.A
+            D_1A = jnp.diag(1 / D) @ A
             try:
                 # the eigenvalue computation is forced on CPU and the result goes
                 # back to GPU
                 eigen_D_1A = jnp.linalg.eigvals(jax.device_put(D_1A, cpu))
-                self.precomputations = jax.device_put(eigen_D_1A, gpu)
+                precomputations = jax.device_put(eigen_D_1A, gpu)
             except RuntimeError:
                 # no GPU found so the computation is directly done on CPU
-                self.precomputations = jnp.linalg.eigvals(D_1A)
-            self.k_max = None
-        elif self.log_det_method == "power_series":
+                precomputations = jnp.linalg.eigvals(D_1A)
+            k_max = None
+
+        elif log_det_method == "power_series":
             # Should be prefered for large graph. Moreover as above, the
             # computation is done on CPU, because RAM can get easily overflowed
             # even with sparse matrix format
@@ -74,29 +106,24 @@ class GraphLayer(eqx.Module):
             # (Hutchinson trace estimator)
             with jax.default_device(cpu):
                 # to avoid memory error for large graphs the instruction
-                # DAD = jnp.diag(self.D ** (-0.5)) @ self.A @ jnp.diag(self.D ** (-0.5))
                 # should become
-                DAD = jax.device_put(
-                    (self.D ** (-0.5))[:, None]
-                    * ((self.D ** (-0.5))[:, None] * self.A),
-                    cpu,
-                )
+                DAD = (D ** (-0.5))[:, None] * ((D ** (-0.5))[:, None] * A)
 
-                # the above line remains a sparse BCOO matrix when self.A is
-
-                self.k_max = 50
-                self.precomputations = jnp.zeros((self.k_max - 1,))
-                for k in range(1, self.k_max):
+                k_max = 30
+                precomputations = jnp.zeros((k_max - 1,))
+                for k in range(1, k_max):
                     if k > 1:
                         DAD = DAD @ DAD
                     key, subkey = jax.random.split(key, 2)
                     u = jax.random.normal(subkey, shape=(A.shape[0], 1))
-                    self.precomputations.at[k - 1].set((u.T @ DAD @ u).squeeze())
-            self.precomputations = jax.device_put(self.precomputations, gpu)
+                    precomputations.at[k - 1].set((u.T @ DAD @ u).squeeze())
+            precomputations = jax.device_put(precomputations, gpu)
         else:
             raise ValueError(
                 "log_det_method must be either eigenvalues or power_series"
             )
+
+        return precomputations, k_max
 
     def __call__(
         self, z, transpose=False, with_bias=True, with_h=False, with_non_linearity=True
