@@ -4,8 +4,6 @@ DGMRF model
 
 import numpy as np
 import equinox as eqx
-import torch
-from torch.distributions import MultivariateNormal
 import jax
 import jax.numpy as jnp
 from jax.experimental.sparse import BCOO
@@ -313,18 +311,10 @@ class DGMRF(eqx.Module):
         key
             A JAX random key
         """
-        # from https://wandb.ai/sauravmaheshkar/RSNA-MICCAI/reports/How-to-Set-Random-Seeds-in-PyTorch-and-Tensorflow--VmlldzoxMDA2MDQy
-        torch.manual_seed(key[0])
-        torch.cuda.manual_seed(key[0])
-        # When running on the CuDNN backend, two further options must be set
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
-
-        mvn = MultivariateNormal(
-            loc=torch.from_numpy(np.array(self.get_mu())),
-            precision_matrix=torch.from_numpy(np.array(self.get_Q())),
+        precision_matrix = self.get_Q()
+        return jax.random.multivariate_normal(
+            key, self.get_mu(), jnp.linalg.inv(precision_matrix)
         )
-        return mvn.sample().numpy()
 
     def posterior_samples(self, nb_samples, y, log_sigma, key, mask=None, x0=None):
         """

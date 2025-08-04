@@ -8,6 +8,10 @@ Welcome to dgmrf's documentation!
 
 Changelog:
 
+* v0.2.2:
+
+    - Drop torch dependency in sampling
+
 * v0.2.1:
 
     - Add large graph support with power series and other modifications
